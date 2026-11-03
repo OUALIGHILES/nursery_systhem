@@ -1,0 +1,28 @@
+{
+  "name": "nursery-management",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Production-ready Nursery Management System: public website, admin dashboard, parent and staff portals, NestJS API, Kafka event-driven processing, PostgreSQL, Docker, Terraform, GitHub Actions.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c blue,green \"npm run start:dev -w api\" \"npm run dev -w web\"",
+    "build": "npm run build -w @nursery/shared && npm run build -w api && npm run build -w web",
+    "lint": "npm run lint -w api && npm run lint -w web",
+    "test": "npm run test -w api",
+    "db:migrate": "npm run prisma:migrate -w api",
+    "db:seed": "npm run prisma:seed -w api",
+    "db:studio": "npm run prisma:studio -w api",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

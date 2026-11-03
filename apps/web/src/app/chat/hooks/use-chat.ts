@@ -1,0 +1,172 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import type { Socket } from "socket.io-client";
+import { chatRequest } from "../chat-api";
+import type { ChatContact, ChatConversation, ChatMessage } from "../chat-types";
+import { CHAT_SERVER_EVENTS } from "../socket-events";
+
+interface Page<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export function useChat(socket: Socket | null, currentUserId: string) {
+  const [conversations, setConversations] = useState<ChatConversation[]>([]);
+  const [contacts, setContacts] = useState<ChatContact[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [contactSearch, setContactSearch] = useState("");
+  const [conversationSearch, setConversationSearch] = useState("");
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    try {
+      const page = await chatRequest<Page<ChatConversation>>(
+        `/messaging/conversations?page=1&pageSize=50&search=${encodeURIComponent(conversationSearch)}`,
+      );
+      setConversations(page.items);
+      setError(null);
+    } catch (cause) {
+      setError((cause as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, [conversationSearch]);
+
+  useEffect(() => {
+    let active = true;
+    void chatRequest<Page<ChatConversation>>(
+      `/messaging/conversations?page=1&pageSize=50&search=${encodeURIComponent(conversationSearch)}`,
+    )
+      .then((page) => {
+        if (!active) return;
+        setConversations(page.items);
+        setError(null);
+      })
+      .catch((cause: Error) => {
+        if (active) setError(cause.message);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [conversationSearch]);
+
+  useEffect(() => {
+    if (!socket) return;
+    const onMessage = (message: ChatMessage) => {
+      setConversations((current) =>
+        current
+          .map((conversation) => {
+            if (conversation.id !== message.conversationId) return conversation;
+            const isIncoming = message.senderId !== currentUserId;
+            return {
+              ...conversation,
+              lastMessage: message,
+              updatedAt: message.createdAt,
+              unreadCount:
+                isIncoming && selectedId !== conversation.id
+                  ? conversation.unreadCount + 1
+                  : conversation.unreadCount,
+            };
+          })
+          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+      );
+    };
+    const onNotification = () => {
+      void reload();
+    };
+    const onRead = (event: { conversationId: string; userId: string }) => {
+      if (event.userId === currentUserId) {
+        setConversations((current) =>
+          current.map((conversation) =>
+            conversation.id === event.conversationId
+              ? { ...conversation, unreadCount: 0 }
+              : conversation,
+          ),
+        );
+      }
+    };
+    socket.on(CHAT_SERVER_EVENTS.MESSAGE, onMessage);
+    socket.on(CHAT_SERVER_EVENTS.NOTIFICATION, onNotification);
+    socket.on(CHAT_SERVER_EVENTS.READ, onRead);
+    return () => {
+      socket.off(CHAT_SERVER_EVENTS.MESSAGE, onMessage);
+      socket.off(CHAT_SERVER_EVENTS.NOTIFICATION, onNotification);
+      socket.off(CHAT_SERVER_EVENTS.READ, onRead);
+    };
+  }, [socket, currentUserId, reload, selectedId]);
+
+  const loadContacts = useCallback(async (search: string) => {
+    setContactSearch(search);
+    try {
+      const result = await chatRequest<ChatContact[]>(
+        `/messaging/contacts?search=${encodeURIComponent(search)}`,
+      );
+      setContacts(result);
+      setError(null);
+    } catch (cause) {
+      setError((cause as Error).message);
+    }
+  }, []);
+
+  const createConversation = useCallback(
+    async (participantId: string, childId?: string) => {
+      try {
+        const conversation = await chatRequest<ChatConversation>(
+          "/messaging/conversations",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              participantId,
+              ...(childId ? { childId } : {}),
+            }),
+          },
+        );
+        await reload();
+        setSelectedId(conversation.id);
+        return conversation.id;
+      } catch (cause) {
+        const message = (cause as Error).message;
+        setError(message);
+        throw cause;
+      }
+    },
+    [reload],
+  );
+
+  const selectConversation = useCallback((conversationId: string) => {
+    setSelectedId(conversationId);
+    setConversations((current) =>
+      current.map((conversation) =>
+        conversation.id === conversationId
+          ? { ...conversation, unreadCount: 0 }
+          : conversation,
+      ),
+    );
+  }, []);
+
+  return {
+    conversations,
+    contacts,
+    selectedId,
+    loading,
+    error,
+    contactSearch,
+    conversationSearch,
+    setConversationSearch,
+    setError,
+    reload,
+    loadContacts,
+    createConversation,
+    selectConversation,
+  };
+}

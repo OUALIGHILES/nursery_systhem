@@ -1,0 +1,866 @@
+// Nursery Management System — PostgreSQL schema
+// Fictional seed data only; never store real children's PII in development.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ================= Enums =================
+
+enum RoleName {
+  SUPER_ADMIN
+  ADMIN
+  DIRECTOR
+  TEACHER
+  STAFF
+  PARENT
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+enum ProgramType {
+  INFANTS
+  TODDLERS
+  PRESCHOOL
+  EARLY_LEARNING
+}
+
+enum RelationType {
+  MOTHER
+  FATHER
+  GUARDIAN
+  OTHER
+}
+
+enum ChildStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum EnrollmentStatus {
+  PENDING
+  UNDER_REVIEW
+  INFO_REQUESTED
+  APPROVED
+  REJECTED
+}
+
+enum EnrollmentRecordStatus {
+  ACTIVE
+  COMPLETED
+  WITHDRAWN
+}
+
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  ABSENT
+  EXCUSED
+}
+
+enum ParticipationStatus {
+  PARTICIPATED
+  PARTIAL
+  NOT_PARTICIPATED
+  ABSENT
+}
+
+enum MealType {
+  BREAKFAST
+  LUNCH
+  SNACK_MORNING
+  SNACK_AFTERNOON
+}
+
+enum ConsumptionLevel {
+  ALL
+  PARTIAL
+  NONE
+}
+
+enum AllergySeverity {
+  MILD
+  MODERATE
+  SEVERE
+}
+
+enum IncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CARD
+  BANK_TRANSFER
+  CASH
+  ONLINE
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum EventType {
+  HOLIDAY
+  EVENT
+  PARENT_MEETING
+  CLASSROOM_ACTIVITY
+  STAFF
+}
+
+enum DocumentVisibility {
+  PRIVATE
+  STAFF
+  PARENT_OF_CHILD
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+}
+
+enum NotificationType {
+  CHECK_IN
+  CHECK_OUT
+  ABSENCE
+  INVOICE
+  PAYMENT
+  MESSAGE
+  INCIDENT
+  ENROLLMENT
+  ACTIVITY
+  GENERAL
+}
+
+enum ConversationType {
+  DIRECT
+  PARENT_ADMIN
+  PARENT_TEACHER
+  STAFF_ADMIN
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  FILE
+}
+
+enum OutboxStatus {
+  PENDING
+  PUBLISHED
+  FAILED
+}
+
+// ================= Auth & RBAC =================
+
+model Role {
+  id          String           @id @default(uuid())
+  name        RoleName         @unique
+  description String?
+  users       User[]
+  permissions RolePermission[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model Permission {
+  id          String           @id @default(uuid())
+  key         String           @unique
+  description String?
+  roles       RolePermission[]
+  createdAt   DateTime         @default(now())
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model User {
+  id                 String    @id @default(uuid())
+  email              String    @unique
+  passwordHash       String
+  firstName          String
+  lastName           String
+  phone              String?
+  isActive           Boolean   @default(true)
+  mustChangePassword Boolean   @default(false)
+  emailVerifiedAt    DateTime?
+  lastLoginAt        DateTime?
+  roleId             String
+  role               Role      @relation(fields: [roleId], references: [id])
+  deletedAt          DateTime?
+
+  parentProfile           Parent?
+  staffProfile            Staff?
+  refreshTokens           RefreshToken[]
+  emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens     PasswordResetToken[]
+  notifications           Notification[]
+  sentMessages            Message[]                 @relation("MessageSender")
+  receivedMessages        Message[]                 @relation("MessageRecipient")
+  conversationMemberships ConversationParticipant[]
+  messageReceipts         MessageReceipt[]
+  auditLogs               AuditLog[]
+  uploadedDocuments       Document[]                @relation("DocumentUploader")
+  checkIns                Attendance[]              @relation("CheckedInBy")
+  checkOuts               Attendance[]              @relation("CheckedOutBy")
+  medicationRecords       MedicationRecord[]        @relation("AdministeredBy")
+  reportedIncidents       Incident[]                @relation("ReportedBy")
+  calendarEvents          CalendarEvent[]
+  blogPosts               BlogPost[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([roleId])
+  @@index([deletedAt])
+}
+
+model RefreshToken {
+  id           String    @id @default(uuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash    String    @unique
+  replacedById String?
+  userAgent    String?
+  ipAddress    String?
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model EmailVerificationToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// ================= People =================
+
+model Parent {
+  id         String        @id @default(uuid())
+  userId     String        @unique
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  occupation String?
+  address    String?
+  nationalId String?
+  children   ChildParent[]
+  invoices   Invoice[]
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+}
+
+model Staff {
+  id             String           @id @default(uuid())
+  userId         String           @unique
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobTitle       String
+  department     String?
+  hiredAt        DateTime         @default(now())
+  bio            String?
+  qualifications String?
+  classrooms     ClassroomStaff[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+}
+
+model Child {
+  id                String                  @id @default(uuid())
+  firstName         String
+  lastName          String
+  dateOfBirth       DateTime                @db.Date
+  gender            Gender                  @default(PREFER_NOT_TO_SAY)
+  photoUrl          String?
+  status            ChildStatus             @default(ACTIVE)
+  classroomId       String?
+  classroom         Classroom?              @relation(fields: [classroomId], references: [id], onDelete: SetNull)
+  parents           ChildParent[]
+  enrollments       Enrollment[]
+  attendances       Attendance[]
+  participations    ActivityParticipation[]
+  mealRecords       MealRecord[]
+  allergies         Allergy[]
+  medicationRecords MedicationRecord[]
+  incidents         Incident[]
+  authorizedPickups AuthorizedPickup[]
+  conversations     Conversation[]
+  documents         Document[]
+  medicalNotes      String?
+  bloodType         String?
+  deletedAt         DateTime?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  @@index([classroomId])
+  @@index([status])
+  @@index([deletedAt])
+  @@index([lastName, firstName])
+}
+
+model ChildParent {
+  childId   String
+  parentId  String
+  relation  RelationType @default(OTHER)
+  isPrimary Boolean      @default(false)
+  canPickup Boolean      @default(true)
+  child     Child        @relation(fields: [childId], references: [id], onDelete: Cascade)
+  parent    Parent       @relation(fields: [parentId], references: [id], onDelete: Cascade)
+
+  @@id([childId, parentId])
+  @@index([parentId])
+}
+
+model AuthorizedPickup {
+  id         String   @id @default(uuid())
+  childId    String
+  child      Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  fullName   String
+  relation   String
+  phone      String
+  idDocument String?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([childId])
+}
+
+// ================= Classrooms & Enrollment =================
+
+model Classroom {
+  id          String           @id @default(uuid())
+  name        String           @unique
+  program     ProgramType
+  ageGroupMin Int
+  ageGroupMax Int
+  capacity    Int
+  room        String?
+  color       String?
+  isActive    Boolean          @default(true)
+  children    Child[]
+  teachers    ClassroomStaff[]
+  activities  Activity[]
+  meals       Meal[]
+  events      CalendarEvent[]
+  incidents   Incident[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([program])
+}
+
+model ClassroomStaff {
+  classroomId String
+  staffId     String
+  roleInRoom  String    @default("TEACHER")
+  classroom   Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  staff       Staff     @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@id([classroomId, staffId])
+  @@index([staffId])
+}
+
+model EnrollmentApplication {
+  id                       String           @id @default(uuid())
+  reference                String           @unique
+  parentFirstName          String
+  parentLastName           String
+  parentEmail              String
+  parentPhone              String
+  parentAddress            String
+  relation                 RelationType     @default(OTHER)
+  childFirstName           String
+  childLastName            String
+  childDateOfBirth         DateTime         @db.Date
+  childGender              Gender           @default(PREFER_NOT_TO_SAY)
+  requestedProgram         ProgramType
+  requestedStartDate       DateTime         @db.Date
+  emergencyContactName     String
+  emergencyContactPhone    String
+  emergencyContactRelation String
+  allergies                String?
+  medicalNotes             String?
+  additionalInfo           String?
+  status                   EnrollmentStatus @default(PENDING)
+  adminNotes               String?
+  reviewedById             String?
+  reviewedAt               DateTime?
+  createdAt                DateTime         @default(now())
+  updatedAt                DateTime         @updatedAt
+
+  @@index([status])
+  @@index([parentEmail])
+  @@index([createdAt])
+}
+
+model Enrollment {
+  id            String                 @id @default(uuid())
+  childId       String
+  child         Child                  @relation(fields: [childId], references: [id], onDelete: Cascade)
+  tuitionPlanId String?
+  tuitionPlan   TuitionPlan?           @relation(fields: [tuitionPlanId], references: [id], onDelete: SetNull)
+  program       ProgramType
+  startDate     DateTime               @db.Date
+  endDate       DateTime?              @db.Date
+  status        EnrollmentRecordStatus @default(ACTIVE)
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  @@index([childId])
+  @@index([status])
+}
+
+// ================= Attendance & Activities =================
+
+model Attendance {
+  id             String           @id @default(uuid())
+  childId        String
+  child          Child            @relation(fields: [childId], references: [id], onDelete: Cascade)
+  date           DateTime         @db.Date
+  status         AttendanceStatus @default(PRESENT)
+  checkInAt      DateTime?
+  checkOutAt     DateTime?
+  checkedInById  String?
+  checkedInBy    User?            @relation("CheckedInBy", fields: [checkedInById], references: [id], onDelete: SetNull)
+  checkedOutById String?
+  checkedOutBy   User?            @relation("CheckedOutBy", fields: [checkedOutById], references: [id], onDelete: SetNull)
+  pickedUpById   String?
+  notes          String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([childId, date])
+  @@index([date])
+  @@index([status])
+}
+
+model Activity {
+  id             String                  @id @default(uuid())
+  title          String
+  description    String?
+  scheduledAt    DateTime?
+  durationMin    Int?
+  classroomId    String?
+  classroom      Classroom?              @relation(fields: [classroomId], references: [id], onDelete: SetNull)
+  ledByStaffId   String?
+  createdById    String?
+  participations ActivityParticipation[]
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+
+  @@index([classroomId])
+  @@index([scheduledAt])
+}
+
+model ActivityParticipation {
+  id         String              @id @default(uuid())
+  activityId String
+  childId    String
+  status     ParticipationStatus @default(PARTICIPATED)
+  notes      String?
+  activity   Activity            @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  child      Child               @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@unique([activityId, childId])
+  @@index([childId])
+}
+
+// ================= Meals & Health =================
+
+model Meal {
+  id          String       @id @default(uuid())
+  date        DateTime     @db.Date
+  mealType    MealType
+  name        String
+  description String?
+  allergens   String[]     @default([])
+  classroomId String?
+  classroom   Classroom?   @relation(fields: [classroomId], references: [id], onDelete: SetNull)
+  records     MealRecord[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@unique([date, mealType, classroomId])
+  @@index([date])
+}
+
+model MealRecord {
+  id          String           @id @default(uuid())
+  mealId      String
+  childId     String
+  consumption ConsumptionLevel @default(ALL)
+  notes       String?
+  meal        Meal             @relation(fields: [mealId], references: [id], onDelete: Cascade)
+  child       Child            @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@unique([mealId, childId])
+  @@index([childId])
+}
+
+model Allergy {
+  id        String          @id @default(uuid())
+  childId   String
+  child     Child           @relation(fields: [childId], references: [id], onDelete: Cascade)
+  allergen  String
+  severity  AllergySeverity @default(MODERATE)
+  notes     String?
+  createdAt DateTime        @default(now())
+
+  @@index([childId])
+}
+
+model MedicationRecord {
+  id               String   @id @default(uuid())
+  childId          String
+  child            Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  medication       String
+  dosage           String
+  administeredAt   DateTime @default(now())
+  administeredById String?
+  administeredBy   User?    @relation("AdministeredBy", fields: [administeredById], references: [id], onDelete: SetNull)
+  notes            String?
+  createdAt        DateTime @default(now())
+
+  @@index([childId])
+  @@index([administeredAt])
+}
+
+model Incident {
+  id             String           @id @default(uuid())
+  childId        String?
+  child          Child?           @relation(fields: [childId], references: [id], onDelete: SetNull)
+  classroomId    String?
+  classroom      Classroom?       @relation(fields: [classroomId], references: [id], onDelete: SetNull)
+  reportedById   String?
+  reportedBy     User?            @relation("ReportedBy", fields: [reportedById], references: [id], onDelete: SetNull)
+  type           String
+  description    String
+  severity       IncidentSeverity @default(LOW)
+  actionTaken    String?
+  parentNotified Boolean          @default(false)
+  occurredAt     DateTime         @default(now())
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([childId])
+  @@index([severity])
+  @@index([occurredAt])
+}
+
+// ================= Billing =================
+
+model TuitionPlan {
+  id              String       @id @default(uuid())
+  name            String       @unique
+  description     String?
+  monthlyAmount   Decimal      @db.Decimal(10, 2)
+  currency        String       @default("EUR")
+  program         ProgramType?
+  siblingDiscount Decimal      @default(0) @db.Decimal(5, 2)
+  isActive        Boolean      @default(true)
+  enrollments     Enrollment[]
+  invoices        Invoice[]
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+}
+
+model Invoice {
+  id            String        @id @default(uuid())
+  number        String        @unique
+  parentId      String
+  parent        Parent        @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  tuitionPlanId String?
+  tuitionPlan   TuitionPlan?  @relation(fields: [tuitionPlanId], references: [id], onDelete: SetNull)
+  periodStart   DateTime      @db.Date
+  periodEnd     DateTime      @db.Date
+  amount        Decimal       @db.Decimal(10, 2)
+  discount      Decimal       @default(0) @db.Decimal(10, 2)
+  total         Decimal       @db.Decimal(10, 2)
+  currency      String        @default("EUR")
+  dueDate       DateTime      @db.Date
+  status        InvoiceStatus @default(DRAFT)
+  issuedAt      DateTime?
+  notes         String?
+  payments      Payment[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([parentId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+model Payment {
+  id          String        @id @default(uuid())
+  invoiceId   String
+  invoice     Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  amount      Decimal       @db.Decimal(10, 2)
+  method      PaymentMethod @default(ONLINE)
+  provider    String?
+  providerRef String?
+  status      PaymentStatus @default(COMPLETED)
+  paidAt      DateTime      @default(now())
+  createdAt   DateTime      @default(now())
+
+  @@index([invoiceId])
+  @@index([providerRef])
+}
+
+// ================= Communication =================
+
+model Message {
+  id             String              @id @default(uuid())
+  senderId       String
+  recipientId    String?
+  childId        String?
+  subject        String?
+  body           String?
+  content        String?
+  messageType    MessageType         @default(TEXT)
+  readAt         DateTime?
+  deliveredAt    DateTime?
+  deletedAt      DateTime?
+  conversationId String?
+  sender         User                @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient      User?               @relation("MessageRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  conversation   Conversation?       @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  attachments    MessageAttachment[]
+  receipts       MessageReceipt[]
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @default(now()) @updatedAt
+
+  @@index([recipientId, readAt])
+  @@index([senderId])
+  @@index([conversationId, createdAt])
+  @@index([deletedAt, createdAt])
+}
+
+model Conversation {
+  id           String                    @id @default(uuid())
+  type         ConversationType
+  childId      String?
+  child        Child?                    @relation(fields: [childId], references: [id], onDelete: SetNull)
+  participants ConversationParticipant[]
+  messages     Message[]
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+
+  @@index([type, updatedAt])
+  @@index([childId])
+}
+
+model ConversationParticipant {
+  id             String       @id @default(uuid())
+  conversationId String
+  userId         String
+  joinedAt       DateTime     @default(now())
+  lastReadAt     DateTime?
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId, joinedAt])
+}
+
+model MessageAttachment {
+  id         String   @id @default(uuid())
+  messageId  String
+  storageKey String   @unique
+  fileName   String
+  mimeType   String
+  fileSize   Int
+  message    Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@index([messageId])
+}
+
+model MessageReceipt {
+  id          String    @id @default(uuid())
+  messageId   String
+  userId      String
+  deliveredAt DateTime?
+  readAt      DateTime?
+  message     Message   @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@index([userId, readAt])
+}
+
+model Notification {
+  id        String              @id @default(uuid())
+  userId    String
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType    @default(GENERAL)
+  channel   NotificationChannel @default(IN_APP)
+  title     String
+  body      String
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime            @default(now())
+
+  @@index([userId, readAt])
+}
+
+model CalendarEvent {
+  id          String     @id @default(uuid())
+  title       String
+  description String?
+  startAt     DateTime
+  endAt       DateTime
+  allDay      Boolean    @default(false)
+  type        EventType  @default(EVENT)
+  classroomId String?
+  classroom   Classroom? @relation(fields: [classroomId], references: [id], onDelete: SetNull)
+  createdById String?
+  createdBy   User?      @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([startAt])
+  @@index([type])
+}
+
+// ================= Documents, audit, content =================
+
+model Document {
+  id           String             @id @default(uuid())
+  childId      String?
+  child        Child?             @relation(fields: [childId], references: [id], onDelete: Cascade)
+  uploadedById String?
+  uploadedBy   User?              @relation("DocumentUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+  type         String
+  fileName     String
+  mimeType     String
+  sizeBytes    Int
+  storageKey   String
+  visibility   DocumentVisibility @default(PRIVATE)
+  createdAt    DateTime           @default(now())
+
+  @@index([childId])
+  @@index([type])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  actorId   String?
+  actor     User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action    String
+  entity    String
+  entityId  String?
+  metadata  Json?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([actorId])
+  @@index([createdAt])
+}
+
+model BlogPost {
+  id          String    @id @default(uuid())
+  title       String
+  slug        String    @unique
+  excerpt     String
+  content     String
+  category    String
+  coverImage  String?
+  published   Boolean   @default(false)
+  publishedAt DateTime?
+  authorId    String?
+  author      User?     @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([category])
+  @@index([published, publishedAt])
+}
+
+model ContactMessage {
+  id        String   @id @default(uuid())
+  name      String
+  email     String
+  phone     String?
+  subject   String
+  message   String
+  handled   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+// ================= Kafka: outbox & idempotency =================
+
+model OutboxEvent {
+  id          String       @id @default(uuid())
+  eventId     String       @unique
+  topic       String
+  payload     Json
+  status      OutboxStatus @default(PENDING)
+  attempts    Int          @default(0)
+  lastError   String?
+  nextRetryAt DateTime     @default(now())
+  publishedAt DateTime?
+  createdAt   DateTime     @default(now())
+
+  @@index([status, nextRetryAt])
+}
+
+model ProcessedEvent {
+  id            String   @id @default(uuid())
+  eventId       String   @unique
+  consumerGroup String
+  processedAt   DateTime @default(now())
+
+  @@index([consumerGroup])
+}
