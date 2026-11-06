@@ -26,14 +26,14 @@ import {
 } from "class-validator";
 import { Type } from "class-transformer";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
-import { PrismaService } from "../prisma/prisma.service";
-import { AccessService } from "../common/access.service";
-import { AuditService } from "../common/audit.service";
-import { Roles } from "../common/decorators/roles.decorator";
-import { CurrentUser, type AuthenticatedUser } from "../common/decorators/current-user.decorator";
-import { isStaffRole } from "../common/guards/roles.guard";
-import { normalizePage, toPage } from "../common/pagination";
-import type { ConsumptionLevel, MealType } from "../generated/prisma/enums";
+import { PrismaService } from "../prisma/prisma.service.js";
+import { AccessService } from "../common/access.service.js";
+import { AuditService } from "../common/audit.service.js";
+import { Roles } from "../common/decorators/roles.decorator.js";
+import { CurrentUser, type AuthenticatedUser } from "../common/decorators/current-user.decorator.js";
+import { isStaffRole } from "../common/guards/roles.guard.js";
+import { normalizePage, toPage } from "../common/pagination.js";
+import type { ConsumptionLevel, MealType } from "../generated/prisma/enums.js";
 
 const MEAL_TYPES: MealType[] = ["BREAKFAST", "LUNCH", "SNACK_MORNING", "SNACK_AFTERNOON"];
 const CONSUMPTION: ConsumptionLevel[] = ["ALL", "PARTIAL", "NONE"];

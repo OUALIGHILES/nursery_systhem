@@ -1,11 +1,11 @@
 import { Body, Controller, Get, Param, Patch, Post } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
-import { Roles } from "../common/decorators/roles.decorator";
-import { CurrentUser, type AuthenticatedUser } from "../common/decorators/current-user.decorator";
-import { isStaffRole } from "../common/guards/roles.guard";
+import { Roles } from "../common/decorators/roles.decorator.js";
+import { CurrentUser, type AuthenticatedUser } from "../common/decorators/current-user.decorator.js";
+import { isStaffRole } from "../common/guards/roles.guard.js";
 import { ForbiddenException } from "@nestjs/common";
-import { ClassroomsService } from "./classrooms.service";
-import { CreateClassroomDto, UpdateClassroomDto } from "./dto";
+import { ClassroomsService } from "./classrooms.service.js";
+import { CreateClassroomDto, UpdateClassroomDto } from "./dto.js";
 
 @ApiTags("classrooms")
 @ApiBearerAuth()

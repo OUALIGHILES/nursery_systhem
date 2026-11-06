@@ -7,10 +7,10 @@ import {
 import { ConfigService } from "@nestjs/config";
 import { Reflector } from "@nestjs/core";
 import { JwtService } from "@nestjs/jwt";
-import { IS_PUBLIC_KEY } from "../decorators/public.decorator";
-import { PrismaService } from "../../prisma/prisma.service";
-import type { AuthenticatedUser } from "../decorators/current-user.decorator";
-import type { Env } from "../../config/env";
+import { IS_PUBLIC_KEY } from "../decorators/public.decorator.js";
+import { PrismaService } from "../../prisma/prisma.service.js";
+import type { AuthenticatedUser } from "../decorators/current-user.decorator.js";
+import type { Env } from "../../config/env.js";
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {

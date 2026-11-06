@@ -7,7 +7,7 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Kafka, type Producer } from "kafkajs";
-import type { Env } from "../config/env";
+import type { Env } from "../config/env.js";
 
 @Injectable()
 export class KafkaProducerService implements OnApplicationShutdown {
@@ -38,13 +38,13 @@ export class KafkaProducerService implements OnApplicationShutdown {
     if (!this.client) return null;
     if (this.producer) return this.producer;
     if (!this.connecting) {
-      this.connecting = this.client
-        .producer({ allowAutoTopicCreation: false, idempotent: true, maxInFlightRequests: 1 })
+      const producer = this.client.producer({ allowAutoTopicCreation: false, idempotent: true, maxInFlightRequests: 1 });
+      this.connecting = producer
         .connect()
-        .then((p) => {
-          this.producer = p;
+        .then(() => {
+          this.producer = producer;
           this.logger.log("Kafka producer connected");
-          return p;
+          return producer;
         })
         .catch((err: Error) => {
           this.logger.error(`Kafka producer connect failed: ${err.message}`);

@@ -7,12 +7,12 @@ import {
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import argon2 from "argon2";
-import { PrismaService } from "../prisma/prisma.service";
-import { MailService } from "../common/mail.service";
-import { AuditService } from "../common/audit.service";
-import type { Env } from "../config/env";
-import { generateOpaqueToken, hashToken, parseTtlMs } from "./auth.tokens";
-import type { RoleName } from "../generated/prisma/enums";
+import { PrismaService } from "../prisma/prisma.service.js";
+import { MailService } from "../common/mail.service.js";
+import { AuditService } from "../common/audit.service.js";
+import type { Env } from "../config/env.js";
+import { generateOpaqueToken, hashToken, parseTtlMs } from "./auth.tokens.js";
+import type { RoleName } from "../generated/prisma/enums.js";
 
 export interface TokenPair {
   accessToken: string;

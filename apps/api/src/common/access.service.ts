@@ -1,7 +1,7 @@
 import { ForbiddenException, Global, Injectable, Module, NotFoundException } from "@nestjs/common";
-import { PrismaService } from "../prisma/prisma.service";
-import { isStaffRole } from "./guards/roles.guard";
-import type { AuthenticatedUser } from "./decorators/current-user.decorator";
+import { PrismaService } from "../prisma/prisma.service.js";
+import { isStaffRole } from "./guards/roles.guard.js";
+import type { AuthenticatedUser } from "./decorators/current-user.decorator.js";
 
 /** Resource-level authorization for child-scoped data. */
 @Injectable()

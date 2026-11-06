@@ -4,16 +4,16 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { PrismaService } from "../prisma/prisma.service";
-import { AccessService } from "../common/access.service";
-import { AuditService } from "../common/audit.service";
-import { OutboxService } from "../kafka/outbox.service";
-import { normalizePage, toPage } from "../common/pagination";
-import { isStaffRole } from "../common/guards/roles.guard";
-import type { AuthenticatedUser } from "../common/decorators/current-user.decorator";
-import type { AttendanceRangeDto, CheckInDto, CheckOutDto, MarkAbsentDto, QueryAttendanceDto } from "./dto";
-import type { AttendanceStatus } from "../generated/prisma/enums";
-import type { Prisma } from "../generated/prisma/client";
+import { PrismaService } from "../prisma/prisma.service.js";
+import { AccessService } from "../common/access.service.js";
+import { AuditService } from "../common/audit.service.js";
+import { OutboxService } from "../kafka/outbox.service.js";
+import { normalizePage, toPage } from "../common/pagination.js";
+import { isStaffRole } from "../common/guards/roles.guard.js";
+import type { AuthenticatedUser } from "../common/decorators/current-user.decorator.js";
+import type { AttendanceRangeDto, CheckInDto, CheckOutDto, MarkAbsentDto, QueryAttendanceDto } from "./dto.js";
+import type { AttendanceStatus } from "../generated/prisma/enums.js";
+import type { Prisma } from "../generated/prisma/client.js";
 
 /** Arrival after this local time marks the child as LATE. */
 const LATE_AFTER = { hour: 9, minute: 30 };

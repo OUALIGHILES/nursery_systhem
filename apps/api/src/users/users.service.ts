@@ -7,13 +7,13 @@ import {
 } from "@nestjs/common";
 import argon2 from "argon2";
 import { randomBytes } from "crypto";
-import { PrismaService } from "../prisma/prisma.service";
-import { AuditService } from "../common/audit.service";
-import { MailService } from "../common/mail.service";
-import { normalizePage, toPage } from "../common/pagination";
-import type { AuthenticatedUser } from "../common/decorators/current-user.decorator";
-import type { CreateUserDto, QueryUsersDto, UpdateUserDto } from "./dto";
-import type { RoleName } from "../generated/prisma/enums";
+import { PrismaService } from "../prisma/prisma.service.js";
+import { AuditService } from "../common/audit.service.js";
+import { MailService } from "../common/mail.service.js";
+import { normalizePage, toPage } from "../common/pagination.js";
+import type { AuthenticatedUser } from "../common/decorators/current-user.decorator.js";
+import type { CreateUserDto, QueryUsersDto, UpdateUserDto } from "./dto.js";
+import type { RoleName } from "../generated/prisma/enums.js";
 
 const ADMIN_ROLES: RoleName[] = ["SUPER_ADMIN", "ADMIN", "DIRECTOR"];
 
@@ -97,7 +97,7 @@ export class UsersService {
       });
       if (dto.role === "PARENT") {
         await tx.parent.create({ data: { userId: created.id, address: dto.address ?? null } });
-      } else if (dto.role !== "PARENT") {
+      } else {
         await tx.staff.create({
           data: { userId: created.id, jobTitle: dto.jobTitle ?? dto.role, hiredAt: new Date() },
         });

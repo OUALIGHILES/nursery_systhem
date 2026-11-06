@@ -1,26 +1,141 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f7f3e9;
+  --foreground: #293d35;
+  --muted: #747c72;
+  --card: #ffffff;
+  --border: #e8e6dc;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-body);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  scroll-behavior: smooth;
 }
 
 body {
+  margin: 0;
+  min-height: 100vh;
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-body), Arial, Helvetica, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+button,
+input,
+select,
+textarea {
+  font-family: var(--font-heading), var(--font-body), Arial, sans-serif;
+}
+
+::selection {
+  background: rgba(120, 143, 117, 0.28);
+}
+
+a {
+  text-decoration: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.admin-workspace {
+  background: #f7f3e9;
+  color: #293d35;
+}
+
+.admin-workspace .admin-sidebar {
+  box-shadow: 8px 0 32px rgb(41 61 53 / 3%);
+}
+
+.admin-workspace .admin-sidebar nav a {
+  min-height: 42px;
+}
+
+.admin-workspace .admin-sidebar nav a[aria-current="page"] [aria-hidden="true"] {
+  color: #e9a88e;
+}
+
+.admin-workspace .admin-stat {
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.admin-workspace .admin-stat:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 36px rgb(41 61 53 / 8%);
+}
+
+.admin-workspace .admin-section-hero {
+  isolation: isolate;
+  background:
+    radial-gradient(ellipse at 92% 8%, rgb(200 188 232 / 18%), transparent 25rem),
+    linear-gradient(120deg, #fffdf8 0%, #f7f3e9 100%);
+}
+
+.admin-workspace .admin-records-panel {
+  box-shadow: 0 14px 38px rgb(41 61 53 / 5%);
+}
+
+.admin-workspace .admin-records-panel tbody tr {
+  transition: background-color 160ms ease;
+}
+
+.admin-workspace main table thead tr {
+  background: #f7f3e9;
+  color: #747c72;
+}
+
+.admin-workspace main table tbody tr:hover {
+  background: #fbf9f2;
+}
+
+.admin-workspace main table tbody td {
+  color: #52605a;
+}
+
+.admin-workspace main input[aria-label^="Search"],
+.admin-workspace main label:has(input[aria-label^="Search"]) {
+  border-color: #e8e6dc;
+  background: #fbf9f2;
+  color: #526b55;
+}
+
+.admin-workspace main button:focus-visible,
+.admin-workspace main a:focus-visible,
+.admin-workspace aside a:focus-visible,
+.admin-workspace aside button:focus-visible {
+  outline: 2px solid #788f75;
+  outline-offset: 3px;
+}
+
+.admin-workspace .admin-dialog input:focus,
+.admin-workspace .admin-dialog select:focus,
+.admin-workspace .admin-dialog textarea:focus {
+  border-color: #788f75;
+  box-shadow: 0 0 0 3px rgb(120 143 117 / 14%);
 }

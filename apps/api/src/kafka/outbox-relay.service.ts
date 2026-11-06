@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
-import { OutboxService } from "./outbox.service";
+import { OutboxService } from "./outbox.service.js";
 
 /** Polls the outbox and publishes due events. Runs only in the worker process. */
 @Injectable()

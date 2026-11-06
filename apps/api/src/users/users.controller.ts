@@ -9,10 +9,10 @@ import {
   Query,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
-import { Roles } from "../common/decorators/roles.decorator";
-import { CurrentUser, type AuthenticatedUser } from "../common/decorators/current-user.decorator";
-import { UsersService } from "./users.service";
-import { CreateUserDto, QueryUsersDto, ResetUserPasswordDto, UpdateUserDto } from "./dto";
+import { Roles } from "../common/decorators/roles.decorator.js";
+import { CurrentUser, type AuthenticatedUser } from "../common/decorators/current-user.decorator.js";
+import { UsersService } from "./users.service.js";
+import { CreateUserDto, QueryUsersDto, ResetUserPasswordDto, UpdateUserDto } from "./dto.js";
 
 @ApiTags("users")
 @ApiBearerAuth()

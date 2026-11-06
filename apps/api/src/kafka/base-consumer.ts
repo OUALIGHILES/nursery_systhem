@@ -1,9 +1,9 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Kafka, type Consumer, type EachMessagePayload } from "kafkajs";
-import { PrismaService } from "../prisma/prisma.service";
-import type { Env } from "../config/env";
-import { KAFKA } from "./topics";
+import { PrismaService } from "../prisma/prisma.service.js";
+import type { Env } from "../config/env.js";
+import { KAFKA } from "./topics.js";
 
 export interface ConsumedEvent {
   eventId: string;

@@ -5,14 +5,14 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { PrismaService } from "../prisma/prisma.service";
-import { AccessService } from "../common/access.service";
-import { AuditService } from "../common/audit.service";
-import { OutboxService } from "../kafka/outbox.service";
-import { normalizePage, toPage } from "../common/pagination";
-import { isStaffRole } from "../common/guards/roles.guard";
-import type { AuthenticatedUser } from "../common/decorators/current-user.decorator";
-import type { AssignClassroomDto, CreateChildDto, CreatePickupDto, LinkParentDto, QueryChildrenDto, UpdateChildDto } from "./dto";
+import { PrismaService } from "../prisma/prisma.service.js";
+import { AccessService } from "../common/access.service.js";
+import { AuditService } from "../common/audit.service.js";
+import { OutboxService } from "../kafka/outbox.service.js";
+import { normalizePage, toPage } from "../common/pagination.js";
+import { isStaffRole } from "../common/guards/roles.guard.js";
+import type { AuthenticatedUser } from "../common/decorators/current-user.decorator.js";
+import type { AssignClassroomDto, CreateChildDto, CreatePickupDto, LinkParentDto, QueryChildrenDto, UpdateChildDto } from "./dto.js";
 
 const CHILD_INCLUDE = {
   classroom: true,

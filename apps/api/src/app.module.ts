@@ -12,6 +12,17 @@ import { AuthModule } from './auth/auth.module.js';
 import { MessagingModule } from './messaging/messaging.module.js';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard.js';
 import { RolesGuard } from './common/guards/roles.guard.js';
+import { ActivitiesModule } from './activities/activities.module.js';
+import { AttendanceModule } from './attendance/attendance.module.js';
+import { BillingModule } from './billing/billing.module.js';
+import { ChildrenModule } from './children/children.module.js';
+import { ClassroomsModule } from './classrooms/classrooms.module.js';
+import { HealthModule } from './health/health.module.js';
+import { MealsModule } from './meals/meals.module.js';
+import { ParentsModule } from './parents/parents.module.js';
+import { StaffModule } from './staff/staff.module.js';
+import { UsersModule } from './users/users.module.js';
+import { EnrollmentModule } from './enrollment/enrollment.module.js';
 
 @Module({
   imports: [
@@ -22,6 +33,17 @@ import { RolesGuard } from './common/guards/roles.guard.js';
     AccessModule,
     AuthModule,
     MessagingModule,
+    ActivitiesModule,
+    AttendanceModule,
+    BillingModule,
+    ChildrenModule,
+    ClassroomsModule,
+    HealthModule,
+    MealsModule,
+    ParentsModule,
+    StaffModule,
+    UsersModule,
+    EnrollmentModule,
   ],
   controllers: [AppController],
   providers: [

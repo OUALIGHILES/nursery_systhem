@@ -9,10 +9,10 @@ import {
   Query,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
-import { Roles } from "../common/decorators/roles.decorator";
-import { CurrentUser, type AuthenticatedUser } from "../common/decorators/current-user.decorator";
-import { ChildrenService } from "./children.service";
-import { AssignClassroomDto, CreateChildDto, CreatePickupDto, LinkParentDto, QueryChildrenDto, UpdateChildDto } from "./dto";
+import { Roles } from "../common/decorators/roles.decorator.js";
+import { CurrentUser, type AuthenticatedUser } from "../common/decorators/current-user.decorator.js";
+import { ChildrenService } from "./children.service.js";
+import { AssignClassroomDto, CreateChildDto, CreatePickupDto, LinkParentDto, QueryChildrenDto, UpdateChildDto } from "./dto.js";
 
 @ApiTags("children")
 @ApiBearerAuth()

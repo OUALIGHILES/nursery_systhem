@@ -14,11 +14,11 @@ import { ConfigService } from "@nestjs/config";
 import { Throttle } from "@nestjs/throttler";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { Request, Response } from "express";
-import { AuthService } from "./auth.service";
-import { ChangePasswordDto, ForgotPasswordDto, LoginDto, RefreshDto, ResetPasswordDto, VerifyEmailDto } from "./dto";
-import { Public } from "../common/decorators/public.decorator";
-import { CurrentUser, type AuthenticatedUser } from "../common/decorators/current-user.decorator";
-import type { Env } from "../config/env";
+import { AuthService } from "./auth.service.js";
+import { ChangePasswordDto, ForgotPasswordDto, LoginDto, RefreshDto, ResetPasswordDto, VerifyEmailDto } from "./dto.js";
+import { Public } from "../common/decorators/public.decorator.js";
+import { CurrentUser, type AuthenticatedUser } from "../common/decorators/current-user.decorator.js";
+import type { Env } from "../config/env.js";
 
 @ApiTags("auth")
 @Controller("auth")

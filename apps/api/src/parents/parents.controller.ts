@@ -1,10 +1,10 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from "@nestjs/common";
 import { IsBoolean } from "class-validator";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
-import { Roles } from "../common/decorators/roles.decorator";
-import { CurrentUser, type AuthenticatedUser } from "../common/decorators/current-user.decorator";
-import { ParentsService } from "./parents.service";
-import { QueryParentsDto, UpdateParentDto } from "./dto";
+import { Roles } from "../common/decorators/roles.decorator.js";
+import { CurrentUser, type AuthenticatedUser } from "../common/decorators/current-user.decorator.js";
+import { ParentsService } from "./parents.service.js";
+import { QueryParentsDto, UpdateParentDto } from "./dto.js";
 
 class SetActiveDto {
   @IsBoolean()

@@ -16,7 +16,7 @@ import { createReadStream, promises as fs } from 'fs';
 import { join, normalize, extname } from 'path';
 import { randomUUID } from 'crypto';
 import type { Readable } from 'stream';
-import type { Env } from '../config/env';
+import type { Env } from '../config/env.js';
 
 const ALLOWED_MIME = new Map<string, string>([
   ['image/jpeg', '.jpg'],

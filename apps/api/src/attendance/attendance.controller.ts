@@ -8,9 +8,9 @@ import {
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { ForbiddenException } from "@nestjs/common";
-import { CurrentUser, type AuthenticatedUser } from "../common/decorators/current-user.decorator";
-import { AttendanceService } from "./attendance.service";
-import { AttendanceRangeDto, CheckInDto, CheckOutDto, MarkAbsentDto, QueryAttendanceDto } from "./dto";
+import { CurrentUser, type AuthenticatedUser } from "../common/decorators/current-user.decorator.js";
+import { AttendanceService } from "./attendance.service.js";
+import { AttendanceRangeDto, CheckInDto, CheckOutDto, MarkAbsentDto, QueryAttendanceDto } from "./dto.js";
 
 @ApiTags("attendance")
 @ApiBearerAuth()

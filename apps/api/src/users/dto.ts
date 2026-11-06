@@ -1,6 +1,6 @@
 import { IsBoolean, IsEmail, IsIn, IsOptional, IsString, Length, Matches, MaxLength, MinLength } from "class-validator";
 import { Type } from "class-transformer";
-import type { RoleName } from "../generated/prisma/enums";
+import type { RoleName } from "../generated/prisma/enums.js";
 
 const ROLE_NAMES: RoleName[] = ["SUPER_ADMIN", "ADMIN", "DIRECTOR", "TEACHER", "STAFF", "PARENT"];
 

@@ -1,9 +1,9 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
-import { Roles } from "../common/decorators/roles.decorator";
-import { CurrentUser, type AuthenticatedUser } from "../common/decorators/current-user.decorator";
-import { StaffService } from "./staff.service";
-import { AssignClassroomStaffDto, QueryStaffDto, UpdateStaffDto } from "./dto";
+import { Roles } from "../common/decorators/roles.decorator.js";
+import { CurrentUser, type AuthenticatedUser } from "../common/decorators/current-user.decorator.js";
+import { StaffService } from "./staff.service.js";
+import { AssignClassroomStaffDto, QueryStaffDto, UpdateStaffDto } from "./dto.js";
 
 @ApiTags("staff")
 @ApiBearerAuth()

@@ -8,7 +8,7 @@ import {
   MaxLength,
 } from "class-validator";
 import { Type } from "class-transformer";
-import type { AttendanceStatus } from "../generated/prisma/enums";
+import type { AttendanceStatus } from "../generated/prisma/enums.js";
 
 export class CheckInDto {
   @IsUUID()

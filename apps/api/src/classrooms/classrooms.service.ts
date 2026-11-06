@@ -4,10 +4,10 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { PrismaService } from "../prisma/prisma.service";
-import { AuditService } from "../common/audit.service";
-import type { AuthenticatedUser } from "../common/decorators/current-user.decorator";
-import type { CreateClassroomDto, UpdateClassroomDto } from "./dto";
+import { PrismaService } from "../prisma/prisma.service.js";
+import { AuditService } from "../common/audit.service.js";
+import type { AuthenticatedUser } from "../common/decorators/current-user.decorator.js";
+import type { CreateClassroomDto, UpdateClassroomDto } from "./dto.js";
 
 @Injectable()
 export class ClassroomsService {
@@ -94,7 +94,7 @@ export class ClassroomsService {
   private serialize(c: {
     id: string; name: string; program: string; ageGroupMin: number; ageGroupMax: number; capacity: number;
     room: string | null; color: string | null; isActive: boolean; createdAt?: Date;
-    teachers: { roleInRoom?: string; staff: { id?: string; jobTitle?: string; user: { id?: string; firstName: string; lastName: string; email?: string } } }[];
+    teachers: Array<{ roleInRoom?: string | null; staff?: { id?: string | null; jobTitle?: string | null; user: { id?: string | null; firstName: string; lastName: string; email?: string | null } } | null }>;
     _count: { children: number };
     children?: { id: string; firstName: string; lastName: string; status: string; dateOfBirth: Date }[];
   }, detailed = false) {
@@ -110,7 +110,11 @@ export class ClassroomsService {
       room: c.room,
       color: c.color,
       isActive: c.isActive,
-      teachers: c.teachers.map((t) => ({ staffId: t.staff.id ?? null, name: `${t.staff.user.firstName} ${t.staff.user.lastName}`, roleInRoom: t.roleInRoom ?? "TEACHER" })),
+      teachers: c.teachers.map((t) => ({
+        staffId: t.staff?.id ?? null,
+        name: `${t.staff?.user?.firstName ?? ""} ${t.staff?.user?.lastName ?? ""}`.trim() || null,
+        roleInRoom: t.roleInRoom ?? "TEACHER",
+      })),
     };
     if (!detailed) return base;
     return { ...base, children: c.children ?? [] };

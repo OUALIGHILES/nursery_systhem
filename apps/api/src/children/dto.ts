@@ -9,7 +9,7 @@ import {
   MaxLength,
 } from "class-validator";
 import { Type } from "class-transformer";
-import type { Gender, RelationType, ChildStatus } from "../generated/prisma/enums";
+import type { Gender, RelationType, ChildStatus } from "../generated/prisma/enums.js";
 
 const GENDERS: Gender[] = ["MALE", "FEMALE", "OTHER", "PREFER_NOT_TO_SAY"];
 const RELATIONS: RelationType[] = ["MOTHER", "FATHER", "GUARDIAN", "OTHER"];

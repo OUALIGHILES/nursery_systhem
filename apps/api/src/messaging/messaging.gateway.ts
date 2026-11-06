@@ -75,15 +75,29 @@ export class MessagingGateway
         .catch(() => next(new Error('Unauthorized')));
     });
     this.heartbeat = setInterval(() => {
-      for (const client of server.sockets.sockets.values()) {
-        const user = client.data.user as AuthenticatedUser | undefined;
-        if (user)
-          void this.redis
-            .refreshSocket(user.id, client.id)
-            .catch((error: Error) =>
-              this.logger.error(`Presence refresh failed: ${error.message}`),
-            );
-      }
+      void server
+        .fetchSockets()
+        .then((clients) =>
+          Promise.all(
+            clients.flatMap((client) => {
+              const user = client.data.user as AuthenticatedUser | undefined;
+              return user
+                ? [
+                    this.redis
+                      .refreshSocket(user.id, client.id)
+                      .catch((error: Error) =>
+                        this.logger.error(
+                          `Presence refresh failed: ${error.message}`,
+                        ),
+                      ),
+                  ]
+                : [];
+            }),
+          ),
+        )
+        .catch((error: Error) =>
+          this.logger.error(`Presence refresh failed: ${error.message}`),
+        );
     }, 30_000);
     this.heartbeat.unref?.();
   }

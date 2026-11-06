@@ -1,0 +1,1 @@
+-- The initial migration already includes the realtime messaging schema.

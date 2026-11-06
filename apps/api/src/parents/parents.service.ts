@@ -1,9 +1,9 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { PrismaService } from "../prisma/prisma.service";
-import { AuditService } from "../common/audit.service";
-import { normalizePage, toPage } from "../common/pagination";
-import type { AuthenticatedUser } from "../common/decorators/current-user.decorator";
-import type { QueryParentsDto, UpdateParentDto } from "./dto";
+import { PrismaService } from "../prisma/prisma.service.js";
+import { AuditService } from "../common/audit.service.js";
+import { normalizePage, toPage } from "../common/pagination.js";
+import type { AuthenticatedUser } from "../common/decorators/current-user.decorator.js";
+import type { QueryParentsDto, UpdateParentDto } from "./dto.js";
 
 @Injectable()
 export class ParentsService {

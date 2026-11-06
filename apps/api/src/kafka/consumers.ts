@@ -1,10 +1,10 @@
 import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { BaseEventConsumer, type ConsumedEvent } from "./base-consumer";
-import { PrismaService } from "../prisma/prisma.service";
-import { MailService } from "../common/mail.service";
-import { KAFKA } from "./topics";
-import type { Env } from "../config/env";
+import { BaseEventConsumer, type ConsumedEvent } from "./base-consumer.js";
+import { PrismaService } from "../prisma/prisma.service.js";
+import { MailService } from "../common/mail.service.js";
+import { KAFKA } from "./topics.js";
+import type { Env } from "../config/env.js";
 
 const ALL_TOPICS = [...KAFKA.TOPICS];
 

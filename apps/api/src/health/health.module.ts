@@ -22,15 +22,15 @@ import {
   MaxLength,
 } from "class-validator";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
-import { PrismaService } from "../prisma/prisma.service";
-import { AccessService } from "../common/access.service";
-import { AuditService } from "../common/audit.service";
-import { OutboxService } from "../kafka/outbox.service";
-import { CurrentUser, type AuthenticatedUser } from "../common/decorators/current-user.decorator";
-import { Roles } from "../common/decorators/roles.decorator";
-import { isStaffRole } from "../common/guards/roles.guard";
+import { PrismaService } from "../prisma/prisma.service.js";
+import { AccessService } from "../common/access.service.js";
+import { AuditService } from "../common/audit.service.js";
+import { OutboxService } from "../kafka/outbox.service.js";
+import { CurrentUser, type AuthenticatedUser } from "../common/decorators/current-user.decorator.js";
+import { Roles } from "../common/decorators/roles.decorator.js";
+import { isStaffRole } from "../common/guards/roles.guard.js";
 import { ForbiddenException } from "@nestjs/common";
-import type { AllergySeverity, IncidentSeverity } from "../generated/prisma/enums";
+import type { AllergySeverity, IncidentSeverity } from "../generated/prisma/enums.js";
 
 const SEVERITIES: AllergySeverity[] = ["MILD", "MODERATE", "SEVERE"];
 const INCIDENT_SEVERITIES: IncidentSeverity[] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];

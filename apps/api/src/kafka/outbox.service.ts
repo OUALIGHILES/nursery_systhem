@@ -1,9 +1,9 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { randomUUID } from "crypto";
-import { PrismaService } from "../prisma/prisma.service";
-import { KafkaProducerService } from "./kafka.producer";
-import { KAFKA, type KafkaTopicName } from "./topics";
-import type { Prisma } from "../generated/prisma/client";
+import { PrismaService } from "../prisma/prisma.service.js";
+import { KafkaProducerService } from "./kafka.producer.js";
+import { KAFKA, type KafkaTopicName } from "./topics.js";
+import type { Prisma } from "../generated/prisma/client.js";
 
 type Tx = Prisma.TransactionClient;
 

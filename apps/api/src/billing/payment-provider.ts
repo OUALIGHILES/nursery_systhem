@@ -1,6 +1,7 @@
 import { Injectable, Logger, ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import type { Env } from "../config/env";
+import Stripe from "stripe";
+import type { Env } from "../config/env.js";
 
 export interface ChargeRequest {
   invoiceNumber: string;
@@ -39,15 +40,14 @@ export class MockPaymentProvider implements PaymentProvider {
 export class StripePaymentProvider implements PaymentProvider {
   readonly name = "stripe";
   private readonly logger = new Logger(StripePaymentProvider.name);
-  private client: import("stripe") | null = null;
+  private client: Stripe | null = null;
 
   constructor(private readonly config: ConfigService<Env, true>) {}
 
-  private async stripe() {
+  private async stripe(): Promise<Stripe> {
     if (this.client) return this.client;
     const key = this.config.get("STRIPE_SECRET_KEY", { infer: true });
     if (!key) throw new ServiceUnavailableException("Stripe is not configured. Set STRIPE_SECRET_KEY or use PAYMENT_PROVIDER=mock.");
-    const { default: Stripe } = await import("stripe");
     this.client = new Stripe(key);
     return this.client;
   }

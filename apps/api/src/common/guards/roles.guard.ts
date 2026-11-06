@@ -5,9 +5,9 @@ import {
   Injectable,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
-import { ROLES_KEY } from "../decorators/roles.decorator";
-import type { RoleName } from "../../generated/prisma/enums";
-import type { AuthenticatedUser } from "../decorators/current-user.decorator";
+import { ROLES_KEY } from "../decorators/roles.decorator.js";
+import type { RoleName } from "../../generated/prisma/enums.js";
+import type { AuthenticatedUser } from "../decorators/current-user.decorator.js";
 
 const STAFF_ROLES: RoleName[] = ["SUPER_ADMIN", "ADMIN", "DIRECTOR", "TEACHER", "STAFF"];
 export const isStaffRole = (role: RoleName) => STAFF_ROLES.includes(role);

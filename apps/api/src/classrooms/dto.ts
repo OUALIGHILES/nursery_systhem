@@ -9,7 +9,7 @@ import {
   MaxLength,
   Min,
 } from "class-validator";
-import type { ProgramType } from "../generated/prisma/enums";
+import type { ProgramType } from "../generated/prisma/enums.js";
 
 const PROGRAMS: ProgramType[] = ["INFANTS", "TODDLERS", "PRESCHOOL", "EARLY_LEARNING"];
 
