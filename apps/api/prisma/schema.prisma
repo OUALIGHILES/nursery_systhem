@@ -212,6 +212,7 @@ model User {
   phone              String?
   isActive           Boolean   @default(true)
   mustChangePassword Boolean   @default(false)
+  tokenVersion       Int       @default(0)
   emailVerifiedAt    DateTime?
   lastLoginAt        DateTime?
   roleId             String
@@ -344,6 +345,7 @@ model Child {
   @@index([status])
   @@index([deletedAt])
   @@index([lastName, firstName])
+  @@index([firstName, lastName, dateOfBirth])
 }
 
 model ChildParent {

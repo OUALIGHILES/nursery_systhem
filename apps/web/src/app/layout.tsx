@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { DM_Sans, Manrope, Playfair_Display } from "next/font/google";
+import { ThemeToggle } from "../components/theme-toggle";
 import "./globals.css";
 
 const manrope = Manrope({
@@ -30,7 +31,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       data-scroll-behavior="smooth"
       className={`${manrope.variable} ${dmSans.variable} ${playfairDisplay.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        <ThemeToggle />
+      </body>
     </html>
   );
 }

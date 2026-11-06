@@ -47,6 +47,10 @@ export class ChangePasswordDto {
     message: "password must contain upper, lower case letters and a number",
   })
   newPassword!: string;
+
+  @IsString()
+  @Length(10, 128)
+  confirmPassword!: string;
 }
 
 export class VerifyEmailDto {

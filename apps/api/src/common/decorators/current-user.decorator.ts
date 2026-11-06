@@ -9,6 +9,8 @@ export interface AuthenticatedUser {
   lastName: string;
   parentId?: string | null;
   staffId?: string | null;
+  /** True when the account must change its password before using the portal. */
+  mustChangePassword?: boolean;
 }
 
 export const CurrentUser = createParamDecorator(

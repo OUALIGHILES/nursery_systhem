@@ -142,7 +142,10 @@ export class UsersService {
     const temp = temporaryPassword ?? randomBytes(9).toString("base64url") + "A1";
     const passwordHash = await argon2.hash(temp, { type: argon2.argon2id });
     await this.prisma.$transaction([
-      this.prisma.user.update({ where: { id }, data: { passwordHash, mustChangePassword: true } }),
+      this.prisma.user.update({
+        where: { id },
+        data: { passwordHash, mustChangePassword: true, tokenVersion: { increment: 1 } },
+      }),
       this.prisma.refreshToken.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date() } }),
     ]);
     await this.mail.send(existing.email, "Your password was reset", `Hello ${existing.firstName},\n\nAn administrator reset your password.\nTemporary password: ${temp}\nPlease sign in and change it immediately.`);

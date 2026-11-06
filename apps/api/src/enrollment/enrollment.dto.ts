@@ -5,6 +5,7 @@ import {
   IsIn,
   IsOptional,
   IsString,
+  IsUUID,
   Length,
   Max,
   MaxLength,
@@ -104,6 +105,20 @@ export class ReviewEnrollmentApplicationDto {
   @IsString()
   @MaxLength(4000)
   adminNotes?: string;
+
+  /**
+   * Classroom to enroll the child into when approving.
+   * If omitted, the service auto-selects the first active classroom
+   * matching the requested program that still has capacity.
+   */
+  @IsOptional()
+  @IsUUID()
+  classroomId?: string;
+
+  /** Tuition plan to attach to the enrollment when approving. */
+  @IsOptional()
+  @IsUUID()
+  tuitionPlanId?: string;
 }
 
 export class QueryEnrollmentApplicationsDto {

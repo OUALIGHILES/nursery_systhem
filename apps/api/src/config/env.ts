@@ -29,10 +29,19 @@ export const envSchema = z.object({
   JWT_ACCESS_TTL: z.string().default('15m'),
   JWT_REFRESH_TTL: z.string().default('7d'),
   SMTP_HOST: z.string().optional().default(''),
-  SMTP_PORT: z.coerce.number().int().default(587),
+  SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(587),
   SMTP_USER: z.string().optional().default(''),
   SMTP_PASSWORD: z.string().optional().default(''),
-  SMTP_FROM: z.string().default('Little Steps Nursery <no-reply@example.com>'),
+  SMTP_FROM: z
+    .string()
+    .min(1, 'SMTP_FROM is required')
+    .default('Little Steps Nursery <no-reply@example.com>'),
+  SMTP_SECURE: bool(false),
+  SMTP_VERIFY_ON_STARTUP: bool(true),
+  OUTBOX_BATCH_SIZE: z.coerce.number().int().min(1).max(500).default(50),
+  OUTBOX_RELAY_INTERVAL_MS: z.coerce.number().int().min(500).max(60000).default(2000),
+  OUTBOX_HISTORICAL_CUTOFF_ISO: z.string().optional().default(''),
+  KAFKA_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1000).max(30000).default(10000),
   AWS_REGION: z.string().default('eu-west-1'),
   AWS_S3_BUCKET: z.string().optional().default(''),
   UPLOAD_DIR: z.string().default('./uploads'),

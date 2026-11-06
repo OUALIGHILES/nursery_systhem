@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, OnApplicationShutdown } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Kafka, type Consumer, type EachMessagePayload } from "kafkajs";
 import { PrismaService } from "../prisma/prisma.service.js";
@@ -13,14 +13,19 @@ export interface ConsumedEvent {
 }
 
 /**
- * Base class for idempotent consumers with retry + DLQ.
+ * Base class for idempotent consumers with bounded retry + DLQ.
+ *
  * Delivery is at-least-once; handlers must tolerate duplicates.
- * We dedupe via the ProcessedEvent table (unique eventId).
+ * We dedupe via the ProcessedEvent table (unique eventId). The
+ * `start()`/`stop()` lifecycle is idempotent (second start is a no-op,
+ * stop is safe when never started), so the WorkerService can retry
+ * startup without creating duplicate consumer instances.
  */
 @Injectable()
-export abstract class BaseEventConsumer {
+export abstract class BaseEventConsumer implements OnApplicationShutdown {
   protected readonly logger = new Logger(this.constructor.name);
   private consumer: Consumer | null = null;
+  private started = false;
 
   protected constructor(
     protected readonly config: ConfigService<Env, true>,
@@ -31,7 +36,23 @@ export abstract class BaseEventConsumer {
   protected abstract readonly topics: string[];
   protected abstract handle(event: ConsumedEvent): Promise<void>;
 
+  get isRunning(): boolean {
+    return this.started && this.consumer !== null;
+  }
+
+  get consumerGroup(): string {
+    return this.groupId;
+  }
+
+  get subscribedTopics(): string[] {
+    return [...this.topics];
+  }
+
   async start(): Promise<void> {
+    if (this.started && this.consumer) {
+      this.logger.log(`consumer.already_running {group: "${this.groupId}"}`);
+      return;
+    }
     const brokers = this.config.get("KAFKA_BROKERS", { infer: true }).split(",").map((b) => b.trim()).filter(Boolean);
     if (brokers.length === 0) {
       this.logger.warn("KAFKA_BROKERS empty — consumer not started");
@@ -45,6 +66,7 @@ export abstract class BaseEventConsumer {
       brokers,
       ssl,
       ...(user && pass ? { sasl: { mechanism: "plain" as const, username: user, password: pass } } : {}),
+      requestTimeout: this.config.get("KAFKA_REQUEST_TIMEOUT_MS", { infer: true }),
       retry: { retries: 5, initialRetryTime: 300, factor: 2 },
     });
     this.consumer = kafka.consumer({ groupId: this.groupId, allowAutoTopicCreation: false });
@@ -56,7 +78,8 @@ export abstract class BaseEventConsumer {
       autoCommit: false,
       eachMessage: async (payload) => this.processMessage(kafka, payload),
     });
-    this.logger.log(`Subscribed to ${this.topics.join(", ")} as group ${this.groupId}`);
+    this.started = true;
+    this.logger.log(`consumer.started {group: "${this.groupId}", topics: "${this.topics.join(",")}"}`);
   }
 
   private async processMessage(kafka: Kafka, { topic, partition, message }: EachMessagePayload) {
@@ -72,14 +95,16 @@ export abstract class BaseEventConsumer {
       event = JSON.parse(raw) as ConsumedEvent;
       if (!event.eventId || !event.payload) throw new Error("Missing eventId or payload");
     } catch (err) {
-      this.logger.error(`Unparseable message on ${topic}: ${(err as Error).message}`);
-      await this.toDlq(kafka, topic, raw, (err as Error).message);
+      const message = (err as Error).message;
+      this.logger.error(`consumer.processing.error {topic: "${topic}", reason: "unparseable", error: ${message.slice(0, 200)}}`);
+      await this.toDlq(kafka, topic, raw, message);
       await commit();
       return;
     }
 
     const seen = await this.prisma.processedEvent.findUnique({ where: { eventId: event.eventId } });
     if (seen) {
+      this.logger.log(`consumer.deduped {topic: "${topic}", eventId: "${event.eventId}", group: "${this.groupId}"}`);
       await commit();
       return;
     }
@@ -89,15 +114,19 @@ export abstract class BaseEventConsumer {
       try {
         await this.handle(event);
         lastError = null;
+        this.logger.log(`consumer.processed {topic: "${topic}", eventId: "${event.eventId}", group: "${this.groupId}", attempt: ${attempt}}`);
         break;
       } catch (err) {
         lastError = err as Error;
-        this.logger.warn(`Handler failed (attempt ${attempt}/${KAFKA.MAX_CONSUME_RETRIES}) for ${event.eventId}: ${lastError.message}`);
+        this.logger.warn(
+          `consumer.processing.error {topic: "${topic}", eventId: "${event.eventId}", group: "${this.groupId}", attempt: ${attempt}/${KAFKA.MAX_CONSUME_RETRIES}, error: ${lastError.message.slice(0, 200)}}`,
+        );
         await new Promise((r) => setTimeout(r, 250 * 2 ** attempt));
       }
     }
 
     if (lastError) {
+      this.logger.error(`consumer.processing.failed {topic: "${topic}", eventId: "${event.eventId}", group: "${this.groupId}", error: ${lastError.message.slice(0, 200)}}`);
       await this.toDlq(kafka, topic, raw, lastError.message);
     }
     // Mark processed either way so a poison message is not retried forever; DLQ holds the failed copy.
@@ -113,16 +142,25 @@ export abstract class BaseEventConsumer {
       await producer.connect();
       await producer.send({
         topic: `${topic}${KAFKA.DLQ_SUFFIX}`,
-        messages: [{ value: JSON.stringify({ originalTopic: topic, error, raw, failedAt: new Date().toISOString() }) }],
+        messages: [{ value: JSON.stringify({ originalTopic: topic, error, raw: raw.slice(0, 2000), failedAt: new Date().toISOString() }) }],
       });
       await producer.disconnect();
+      this.logger.warn(`consumer.dlq {topic: "${topic}.dlq", error: ${error.slice(0, 200)}}`);
     } catch (err) {
       this.logger.error(`DLQ publish failed for ${topic}: ${(err as Error).message}`);
     }
   }
 
   async stop(): Promise<void> {
-    await this.consumer?.disconnect().catch(() => undefined);
-    this.consumer = null;
+    if (this.consumer) {
+      await this.consumer.disconnect().catch(() => undefined);
+      this.consumer = null;
+      this.logger.log(`consumer.stopped {group: "${this.groupId}"}`);
+    }
+    this.started = false;
+  }
+
+  async onApplicationShutdown(): Promise<void> {
+    await this.stop();
   }
 }

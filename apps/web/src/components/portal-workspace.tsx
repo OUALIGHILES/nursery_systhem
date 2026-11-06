@@ -12,6 +12,7 @@ type Session = {
   firstName: string;
   lastName: string;
   role: string;
+  mustChangePassword?: boolean;
 };
 type Field = {
   name: string;
@@ -142,7 +143,7 @@ const adminSections: Record<string, Section> = {
   },
   admissions: {
     label: "Admissions",
-    description: "Review enrollment applications and record statuses and internal notes. Status changes do not enroll a child or send an email.",
+    description: "Review enrollment applications. Approving creates a child record and enrollment, links the parent and classroom, and sends notifications. Documents are collected through a secure process after approval.",
     endpoint: "/enrollment-applications?page=1&pageSize=50",
     columns: ["reference", "childFirstName", "childLastName", "parentEmail", "requestedProgram", "createdAt", "status"],
   },
@@ -251,6 +252,10 @@ export function PortalWorkspace({ portal, section: sectionProp = "dashboard" }: 
   const [reviewApplication, setReviewApplication] = useState<Record<string, unknown> | null>(null);
   const [reviewStatus, setReviewStatus] = useState("UNDER_REVIEW");
   const [reviewNotes, setReviewNotes] = useState("");
+  const [reviewClassroomId, setReviewClassroomId] = useState("");
+  const [reviewTuitionPlanId, setReviewTuitionPlanId] = useState("");
+  const [classroomOptions, setClassroomOptions] = useState<Record<string, unknown>[]>([]);
+  const [planOptions, setPlanOptions] = useState<Record<string, unknown>[]>([]);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewSaving, setReviewSaving] = useState(false);
   const sectionName = sectionProp || "dashboard";
@@ -263,6 +268,10 @@ export function PortalWorkspace({ portal, section: sectionProp = "dashboard" }: 
     void apiRequest<Session>("/auth/me")
       .then((user) => {
         if (!active) return;
+        if (user.mustChangePassword) {
+          router.replace("/change-password");
+          return;
+        }
         if (!expectedRoles.includes(user.role)) {
           router.replace(roleHome[user.role] ?? "/login");
           return;
@@ -375,6 +384,23 @@ export function PortalWorkspace({ portal, section: sectionProp = "dashboard" }: 
       setReviewApplication(application);
       setReviewStatus(typeof application.status === "string" ? application.status : "PENDING");
       setReviewNotes(typeof application.adminNotes === "string" ? application.adminNotes : "");
+      setReviewClassroomId("");
+      setReviewTuitionPlanId("");
+      const program = typeof application.requestedProgram === "string" ? application.requestedProgram : null;
+      try {
+        const [classrooms, plans] = await Promise.all([
+          apiRequest<unknown>("/classrooms"),
+          apiRequest<unknown>("/billing/plans"),
+        ]);
+        const classroomItems = getPageItems(classrooms).filter(
+          (item) => !program || item.program === program || item.program === undefined,
+        );
+        setClassroomOptions(classroomItems);
+        setPlanOptions(getPageItems(plans));
+      } catch {
+        setClassroomOptions([]);
+        setPlanOptions([]);
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not load the application.");
     } finally {
@@ -388,13 +414,22 @@ export function PortalWorkspace({ portal, section: sectionProp = "dashboard" }: 
     setReviewSaving(true);
     setError(null);
     try {
-      await apiRequest(`/enrollment-applications/${reviewApplication.id}`, {
+      const result = await apiRequest<Record<string, unknown>>(`/enrollment-applications/${reviewApplication.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: reviewStatus, adminNotes: reviewNotes }),
+        body: JSON.stringify({
+          status: reviewStatus,
+          adminNotes: reviewNotes,
+          ...(reviewStatus === "APPROVED" && reviewClassroomId ? { classroomId: reviewClassroomId } : {}),
+          ...(reviewStatus === "APPROVED" && reviewTuitionPlanId ? { tuitionPlanId: reviewTuitionPlanId } : {}),
+        }),
       });
       setReviewApplication(null);
-      setNotice("Application review saved.");
+      setNotice(
+        result.childId
+          ? "Application approved — child and enrollment created."
+          : "Application review saved.",
+      );
       await refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not update the application.");
@@ -661,7 +696,13 @@ export function PortalWorkspace({ portal, section: sectionProp = "dashboard" }: 
             <section className={`overflow-hidden rounded-[24px] border bg-white ${isAdmin ? "admin-records-panel border-[#e8e6dc] shadow-[0_14px_38px_rgba(41,61,53,0.055)]" : "border-[#e4ebe7] shadow-[0_10px_30px_rgba(30,60,46,0.035)]"}`}>
               <div className="flex flex-col gap-3 border-b border-[#edf1ee] p-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-5">
                 <div><h2 className={`font-[family-name:var(--font-heading)] ${isAdmin ? "text-lg font-semibold tracking-[-0.03em] text-[#293d35]" : "font-bold"}`}>{isAdmin ? `${title} directory` : title}</h2><p className="mt-1 text-xs text-[#84928b]">{summary.total !== undefined ? `${summary.total} records` : `${rows.length} records loaded`}</p></div>
-                <label className={`flex items-center gap-2 rounded-full border px-4 py-2.5 text-sm ${isAdmin ? "border-[#e8e6dc] bg-[#fbf9f2] text-[#526b55]" : "border-[#e5ece8] bg-[#fafcfb] text-[#73827b]"}`}><span aria-hidden="true">⌕</span><input aria-label={`Search ${title}`} value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${title.toLowerCase()}`} className="w-full bg-transparent outline-none sm:w-56" /></label>
+                <label className={`dark-mode-search flex items-center gap-3 rounded-full border px-4 py-2.5 text-sm ${isAdmin ? "border-[#e8e6dc] bg-[#fbf9f2] text-[#526b55]" : "border-[#e5ece8] bg-[#fafcfb] text-[#73827b]"}`}>
+                  <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className="size-[17px] shrink-0">
+                    <circle cx="10.8" cy="10.8" r="6.8" />
+                    <path d="m16 16 4 4" />
+                  </svg>
+                  <input aria-label={`Search ${title}`} type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${title.toLowerCase()}`} className="w-full bg-transparent outline-none sm:w-56" />
+                </label>
               </div>
               {error && <div className="p-5"><ErrorBanner message={error} /></div>}
               <div className="overflow-x-auto">
@@ -689,7 +730,7 @@ export function PortalWorkspace({ portal, section: sectionProp = "dashboard" }: 
 
       {formOpen && section.fields && <div className="fixed inset-0 z-50 grid place-items-center bg-[#10231e]/45 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setFormOpen(false); }}><section role="dialog" aria-modal="true" aria-labelledby="create-title" className={`max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl sm:p-8 ${isAdmin ? "admin-dialog" : ""}`}><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#5d8678]">New record</p><h2 id="create-title" className="mt-1 text-2xl font-black">{section.label}</h2></div><button type="button" onClick={() => setFormOpen(false)} aria-label="Close dialog" className="grid size-9 place-items-center rounded-xl bg-[#f2f6f3] text-[#52675e]">×</button></div><form onSubmit={(event) => void submitCreate(event)} className="mt-6 space-y-4">{section.fields.map((field) => <label key={field.name} className="block text-sm font-semibold text-[#3d594e]">{field.label}{field.type === "select" ? <select required={field.required} name={field.name} className="mt-2 w-full rounded-xl border border-[#dfe9e3] bg-[#fbfdfb] px-3.5 py-3 text-sm outline-none focus:border-[#82b797]">{field.options?.map((option) => <option key={option} value={option}>{option.replaceAll("_", " ")}</option>)}</select> : <input required={field.required} name={field.name} type={field.type ?? "text"} step={field.type === "number" ? "any" : undefined} className="mt-2 w-full rounded-xl border border-[#dfe9e3] bg-[#fbfdfb] px-3.5 py-3 text-sm outline-none focus:border-[#82b797]" />}</label>)}{error && <ErrorBanner message={error} />}<button disabled={saving} type="submit" className={`w-full rounded-xl px-4 py-3 text-sm font-semibold text-white transition disabled:opacity-60 ${isAdmin ? "bg-[#293d35] hover:bg-[#526b55]" : "bg-[#246b4b] hover:bg-[#1d5c40]"}`}>{saving ? "Saving…" : "Create record"}</button></form></section></div>}
       {reviewLoading && <div className="fixed inset-0 z-50 grid place-items-center bg-[#10231e]/45 p-4" role="status">Loading application…</div>}
-      {reviewApplication && <div className="fixed inset-0 z-50 grid place-items-center bg-[#10231e]/45 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setReviewApplication(null); }}><section role="dialog" aria-modal="true" aria-labelledby="review-title" className={`max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl sm:p-8 ${isAdmin ? "admin-dialog" : ""}`}><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#5d8678]">Enrollment application · {String(reviewApplication.reference)}</p><h2 id="review-title" className="mt-1 text-2xl font-black">Review application</h2></div><button type="button" onClick={() => setReviewApplication(null)} aria-label="Close dialog" className="grid size-9 place-items-center rounded-xl bg-[#f2f6f3] text-[#52675e]">×</button></div><div className="mt-6 grid gap-3 sm:grid-cols-2">{reviewDetails.map(([label, value]) => <div key={label} className="rounded-xl bg-[#f7faf8] p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-[#84928b]">{label}</p><p className="mt-1 break-words text-sm text-[#3d594e]">{pretty(value)}</p></div>)}</div><form onSubmit={(event) => void saveReview(event)} className="mt-6 space-y-4 border-t border-[#edf1ee] pt-5"><label className="block text-sm font-semibold text-[#3d594e]">Application status<select value={reviewStatus} onChange={(event) => setReviewStatus(event.target.value)} className="mt-1.5 w-full rounded-xl border border-[#dfe8e3] bg-white px-3.5 py-3 text-sm font-normal">{["PENDING", "UNDER_REVIEW", "INFO_REQUESTED", "APPROVED", "REJECTED"].map((status) => <option key={status} value={status}>{status.replaceAll("_", " ")}</option>)}</select></label><label className="block text-sm font-semibold text-[#3d594e]">Internal review notes<textarea value={reviewNotes} onChange={(event) => setReviewNotes(event.target.value)} maxLength={4000} rows={3} className="mt-1.5 w-full rounded-xl border border-[#dfe8e3] bg-white px-3.5 py-3 text-sm font-normal" /></label>{error && <ErrorBanner message={error} />}<button type="submit" disabled={reviewSaving} className={`w-full rounded-xl px-4 py-3 text-sm font-semibold text-white transition disabled:opacity-60 ${isAdmin ? "bg-[#293d35] hover:bg-[#526b55]" : "bg-[#246b4b] hover:bg-[#1d5c40]"}`}>{reviewSaving ? "Saving…" : "Save review"}</button></form></section></div>}
+      {reviewApplication && <div className="fixed inset-0 z-50 grid place-items-center bg-[#10231e]/45 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setReviewApplication(null); }}><section role="dialog" aria-modal="true" aria-labelledby="review-title" className={`max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl sm:p-8 ${isAdmin ? "admin-dialog" : ""}`}><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#5d8678]">Enrollment application · {String(reviewApplication.reference)}</p><h2 id="review-title" className="mt-1 text-2xl font-black">Review application</h2></div><button type="button" onClick={() => setReviewApplication(null)} aria-label="Close dialog" className="grid size-9 place-items-center rounded-xl bg-[#f2f6f3] text-[#52675e]">×</button></div><div className="mt-6 grid gap-3 sm:grid-cols-2">{reviewDetails.map(([label, value]) => <div key={label} className="rounded-xl bg-[#f7faf8] p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-[#84928b]">{label}</p><p className="mt-1 break-words text-sm text-[#3d594e]">{pretty(value)}</p></div>)}</div><form onSubmit={(event) => void saveReview(event)} className="mt-6 space-y-4 border-t border-[#edf1ee] pt-5"><label className="block text-sm font-semibold text-[#3d594e]">Application status<select value={reviewStatus} onChange={(event) => setReviewStatus(event.target.value)} className="mt-1.5 w-full rounded-xl border border-[#dfe8e3] bg-white px-3.5 py-3 text-sm font-normal">{["PENDING", "UNDER_REVIEW", "INFO_REQUESTED", "APPROVED", "REJECTED"].map((status) => <option key={status} value={status}>{status.replaceAll("_", " ")}</option>)}</select></label>{reviewStatus === "APPROVED" && <div className="grid gap-4 sm:grid-cols-2"><label className="block text-sm font-semibold text-[#3d594e]">Classroom<select value={reviewClassroomId} onChange={(event) => setReviewClassroomId(event.target.value)} className="mt-1.5 w-full rounded-xl border border-[#dfe8e3] bg-white px-3.5 py-3 text-sm font-normal"><option value="">Auto-select for program</option>{classroomOptions.map((item) => <option key={String(item.id)} value={String(item.id)}>{String(item.name ?? item.id)} · {String(item.program ?? "")} · {String(item.availablePlaces ?? item.capacity ?? "")} places</option>)}</select></label><label className="block text-sm font-semibold text-[#3d594e]">Tuition plan<select value={reviewTuitionPlanId} onChange={(event) => setReviewTuitionPlanId(event.target.value)} className="mt-1.5 w-full rounded-xl border border-[#dfe8e3] bg-white px-3.5 py-3 text-sm font-normal"><option value="">Auto-select for program</option>{planOptions.map((item) => <option key={String(item.id)} value={String(item.id)}>{String(item.name ?? item.id)} · {String(item.monthlyAmount ?? "")} {String(item.currency ?? "")}</option>)}</select></label></div>}<label className="block text-sm font-semibold text-[#3d594e]">Internal review notes<textarea value={reviewNotes} onChange={(event) => setReviewNotes(event.target.value)} maxLength={4000} rows={3} className="mt-1.5 w-full rounded-xl border border-[#dfe8e3] bg-white px-3.5 py-3 text-sm font-normal" /></label>{error && <ErrorBanner message={error} />}<button type="submit" disabled={reviewSaving} className={`w-full rounded-xl px-4 py-3 text-sm font-semibold text-white transition disabled:opacity-60 ${isAdmin ? "bg-[#293d35] hover:bg-[#526b55]" : "bg-[#246b4b] hover:bg-[#1d5c40]"}`}>{reviewSaving ? "Saving…" : "Save review"}</button></form></section></div>}
       {notice && <div role="status" className="fixed bottom-20 right-4 z-40 rounded-xl bg-[#183a31] px-4 py-3 text-sm font-semibold text-white shadow-xl lg:bottom-5">{notice}<button onClick={() => setNotice(null)} className="ml-4 text-white/70" aria-label="Dismiss notification">×</button></div>}
     </div>
   );

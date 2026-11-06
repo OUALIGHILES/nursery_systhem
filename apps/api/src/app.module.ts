@@ -23,6 +23,8 @@ import { ParentsModule } from './parents/parents.module.js';
 import { StaffModule } from './staff/staff.module.js';
 import { UsersModule } from './users/users.module.js';
 import { EnrollmentModule } from './enrollment/enrollment.module.js';
+import { MailAdminModule } from './common/mail.admin.module.js';
+import { OutboxAdminModule } from './worker/outbox.admin.module.js';
 
 @Module({
   imports: [
@@ -44,6 +46,8 @@ import { EnrollmentModule } from './enrollment/enrollment.module.js';
     StaffModule,
     UsersModule,
     EnrollmentModule,
+    MailAdminModule,
+    OutboxAdminModule,
   ],
   controllers: [AppController],
   providers: [

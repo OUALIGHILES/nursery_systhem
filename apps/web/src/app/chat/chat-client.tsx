@@ -9,6 +9,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { chatRequest } from "./chat-api";
 import type { ChatContact, ChatMessage } from "./chat-types";
 import { useChat } from "./hooks/use-chat";
@@ -22,9 +23,11 @@ interface Session {
   firstName: string;
   lastName: string;
   role: string;
+  mustChangePassword?: boolean;
 }
 
 export default function ChatClient() {
+  const router = useRouter();
   const { socket, connected, connectionError } = useSocket();
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -34,7 +37,12 @@ export default function ChatClient() {
     let active = true;
     void chatRequest<Session>("/auth/me")
       .then((user) => {
-        if (active) setSession(user);
+        if (!active) return;
+        if (user.mustChangePassword) {
+          router.replace("/change-password");
+          return;
+        }
+        setSession(user);
       })
       .catch((cause: Error) => {
         if (active) setAuthError(cause.message);
@@ -45,7 +53,7 @@ export default function ChatClient() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [router]);
 
   if (authLoading) return <CenteredState title="Loading your messages…" />;
   if (!session)
@@ -231,11 +239,12 @@ function MessagingScreen({
                 New chat
               </button>
             </div>
-            <label className="mx-5 mb-4 flex items-center gap-2 rounded-xl border border-[#e7ece9] bg-[#f9fbfa] px-3 py-2.5">
+            <label className="dark-mode-search mx-5 mb-4 flex items-center gap-2 rounded-xl border border-[#e7ece9] bg-[#f9fbfa] px-3 py-2.5">
               <span className="text-[#829189]" aria-hidden="true">
                 ⌕
               </span>
               <input
+                aria-label="Search conversations"
                 value={chat.conversationSearch}
                 onChange={(event) =>
                   chat.setConversationSearch(event.target.value)
@@ -597,10 +606,11 @@ function ContactDialog({
         </div>
         <input
           autoFocus
+          aria-label="Search contacts by name or email"
           value={search}
           onChange={(event) => onSearch(event.target.value)}
           placeholder="Search by name or email"
-          className="mt-5 w-full rounded-xl border border-[#e5ebe7] bg-[#fbfcfb] px-3 py-2.5 text-sm outline-none focus:border-[#9ec2aa]"
+          className="dark-mode-search-input mt-5 w-full rounded-xl border border-[#e5ebe7] bg-[#fbfcfb] px-3 py-2.5 text-sm outline-none focus:border-[#9ec2aa]"
         />
         <div className="mt-3 max-h-64 overflow-y-auto">
           {busy && (

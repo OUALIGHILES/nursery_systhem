@@ -1,0 +1,67 @@
+services:
+  kafka:
+    image: apache/kafka:3.9
+    container_name: nursery-kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_OFFSET_STORAGE_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      CLUSTER_ID: "nursery-local-kraft"
+    ports:
+      - "9092:9092"
+    volumes:
+      - kafka-data:/tmp/kraft-combined-logs
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - nursery-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: nursery-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - nursery-net
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: nursery-api:local
+    container_name: nursery-worker
+    command: ["node", "dist/worker/main"]
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://nursery:change-me-in-local-env@host.docker.internal:5432/nursery?schema=public}
+      REDIS_URL: ${REDIS_URL:-redis://host.docker.internal:6379}
+      KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:9092}
+      KAFKA_CLIENT_ID: ${KAFKA_CLIENT_ID:-nursery-api}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET must be set}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET must be set}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-Little Steps Nursery <no-reply@example.com>}
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - nursery-net
+
+volumes:
+  kafka-data:
+
+networks:
+  nursery-net:

@@ -625,7 +625,7 @@ export class MessagingService implements OnModuleInit, OnModuleDestroy {
       );
   }
 
-  async authenticateSocketUser(userId: string) {
+  async authenticateSocketUser(userId: string, tokenVersion?: number) {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, isActive: true, deletedAt: null },
       include: {
@@ -635,6 +635,15 @@ export class MessagingService implements OnModuleInit, OnModuleDestroy {
       },
     });
     if (!user) throw new NotFoundException('Account not available');
+    // Access-token revocation (Phase 3): same `tv` check as JwtAuthGuard.
+    if (tokenVersion !== undefined && tokenVersion !== (user.tokenVersion ?? 0)) {
+      throw new ForbiddenException('Access token has been revoked');
+    }
+    // Same mustChangePassword enforcement as JwtAuthGuard (HTTP). Without
+    // this, WebSocket chat would bypass the portal password-change gate.
+    if (user.mustChangePassword) {
+      throw new ForbiddenException('Password change required');
+    }
     return {
       id: user.id,
       email: user.email,
@@ -643,6 +652,7 @@ export class MessagingService implements OnModuleInit, OnModuleDestroy {
       lastName: user.lastName,
       parentId: user.parentProfile?.id ?? null,
       staffId: user.staffProfile?.id ?? null,
+      mustChangePassword: user.mustChangePassword,
     } satisfies AuthenticatedUser;
   }
 

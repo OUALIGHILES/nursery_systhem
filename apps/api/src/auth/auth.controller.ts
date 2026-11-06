@@ -17,6 +17,7 @@ import type { Request, Response } from "express";
 import { AuthService } from "./auth.service.js";
 import { ChangePasswordDto, ForgotPasswordDto, LoginDto, RefreshDto, ResetPasswordDto, VerifyEmailDto } from "./dto.js";
 import { Public } from "../common/decorators/public.decorator.js";
+import { PasswordChangeAllowed } from "../common/decorators/password-change-allowed.decorator.js";
 import { CurrentUser, type AuthenticatedUser } from "../common/decorators/current-user.decorator.js";
 import type { Env } from "../config/env.js";
 
@@ -50,6 +51,7 @@ export class AuthController {
     return result;
   }
 
+  @PasswordChangeAllowed()
   @Post("logout")
   @HttpCode(200)
   async logout(@Body() dto: Partial<RefreshDto>, @Res({ passthrough: true }) res: Response) {
@@ -75,10 +77,12 @@ export class AuthController {
     return this.auth.resetPassword(dto.token, dto.newPassword);
   }
 
+  @PasswordChangeAllowed()
   @Post("change-password")
   @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   changePassword(@CurrentUser() user: AuthenticatedUser, @Body() dto: ChangePasswordDto) {
-    return this.auth.changePassword(user.id, dto.currentPassword, dto.newPassword);
+    return this.auth.changePassword(user.id, dto.currentPassword, dto.newPassword, dto.confirmPassword);
   }
 
   @Public()
@@ -88,6 +92,7 @@ export class AuthController {
     return this.auth.verifyEmail(dto.token);
   }
 
+  @PasswordChangeAllowed()
   @Get("me")
   @ApiBearerAuth()
   me(@CurrentUser() user: AuthenticatedUser) {

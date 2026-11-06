@@ -118,4 +118,35 @@ describe('MessagingService', () => {
     ).rejects.toThrow('not a participant');
     expect(repository.getMessages).not.toHaveBeenCalled();
   });
+
+  it('authenticates a socket user when tokenVersion matches and rejects stale versions', async () => {
+    prisma.user.findFirst.mockResolvedValue({
+      id: 'parent-id',
+      email: 'parent@example.test',
+      firstName: 'Taylor',
+      lastName: 'Parent',
+      role: { name: 'PARENT' },
+      parentProfile: { id: 'parent-profile-id' },
+      staffProfile: null,
+      mustChangePassword: false,
+      tokenVersion: 2,
+    });
+    await expect(service.authenticateSocketUser('parent-id', 2)).resolves.toMatchObject({ id: 'parent-id' });
+    await expect(service.authenticateSocketUser('parent-id', 1)).rejects.toThrow('revoked');
+  });
+
+  it('rejects socket authentication when mustChangePassword is true', async () => {
+    prisma.user.findFirst.mockResolvedValue({
+      id: 'parent-id',
+      email: 'parent@example.test',
+      firstName: 'Taylor',
+      lastName: 'Parent',
+      role: { name: 'PARENT' },
+      parentProfile: { id: 'parent-profile-id' },
+      staffProfile: null,
+      mustChangePassword: true,
+      tokenVersion: 0,
+    });
+    await expect(service.authenticateSocketUser('parent-id', 0)).rejects.toThrow('Password change required');
+  });
 });

@@ -27,17 +27,21 @@ export default function LoginPage() {
         const body = (await response.json()) as { message?: string | string[] };
         throw new Error(Array.isArray(body.message) ? body.message.join(", ") : body.message ?? "Sign in failed.");
       }
-      const body = (await response.json()) as { user?: { role?: string } };
-      const destination = body.user?.role
-        ? {
-            SUPER_ADMIN: "/admin",
-            ADMIN: "/admin",
-            DIRECTOR: "/admin",
-            TEACHER: "/staff",
-            STAFF: "/staff",
-            PARENT: "/parent",
-          }[body.user.role] ?? "/chat"
-        : "/chat";
+      const body = (await response.json()) as {
+        user?: { role?: string; mustChangePassword?: boolean };
+      };
+      const destination = body.user?.mustChangePassword
+        ? "/change-password"
+        : body.user?.role
+          ? {
+              SUPER_ADMIN: "/admin",
+              ADMIN: "/admin",
+              DIRECTOR: "/admin",
+              TEACHER: "/staff",
+              STAFF: "/staff",
+              PARENT: "/parent",
+            }[body.user.role] ?? "/chat"
+          : "/chat";
       router.replace(destination);
       router.refresh();
     } catch (cause) {

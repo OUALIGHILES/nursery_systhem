@@ -31,16 +31,18 @@ export class WsJwtGuard {
     if (!token) throw new UnauthorizedException('Authentication required');
 
     let subject: string;
+    let tokenVersion = 0;
     try {
-      const payload = await this.jwt.verifyAsync<{ sub: string }>(token, {
+      const payload = await this.jwt.verifyAsync<{ sub: string; tv?: number }>(token, {
         secret: this.config.get('JWT_ACCESS_SECRET', { infer: true }),
       });
       subject = payload.sub;
+      tokenVersion = payload.tv ?? 0;
     } catch {
       throw new UnauthorizedException('Invalid or expired access token');
     }
     if (!subject) throw new UnauthorizedException('Invalid access token');
-    return this.messaging.authenticateSocketUser(subject);
+    return this.messaging.authenticateSocketUser(subject, tokenVersion);
   }
 }
 

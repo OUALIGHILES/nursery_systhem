@@ -114,26 +114,33 @@ export class EmailEventConsumer extends BaseEventConsumer {
   protected async handle(event: ConsumedEvent) {
     const p = event.payload as Record<string, unknown>;
     const to = String(p.email ?? p.parentEmail ?? "");
-    if (!to) return; // nothing to send
+    if (!to) {
+      this.logger.warn(`consumer.email.skipped {topic: "${event.topic}", eventId: "${event.eventId}", reason: "missing-recipient"}`);
+      return; // nothing to send
+    }
+    const start = Date.now();
     if (event.topic === "notification.requested") {
       if (!p.email) return;
-      await this.mail.send(to, String(p.title ?? "Notification"), String(p.body ?? ""));
+      const result = await this.mail.send(to, String(p.title ?? "Notification"), String(p.body ?? ""));
+      this.logger.log(`consumer.email.sent {topic: "notification.requested", eventId: "${event.eventId}", mode: "${result.mode}", delivered: ${result.delivered}, durationMs: ${Date.now() - start}}`);
       return;
     }
     if (event.topic === "enrollment.approved") {
-      await this.mail.send(
+      const result = await this.mail.send(
         to,
         "Your enrollment application has been approved",
         `Dear ${String(p.parentName ?? "parent")},\n\nWe are delighted to confirm that the application for ${String(p.childName ?? "your child")} (reference ${String(p.reference ?? "")}) has been approved for the ${String(p.program ?? "requested")} program. Our admissions team will contact you shortly with start-date details.\n\nLittle Steps Nursery`,
       );
+      this.logger.log(`consumer.email.sent {topic: "enrollment.approved", eventId: "${event.eventId}", mode: "${result.mode}", delivered: ${result.delivered}, durationMs: ${Date.now() - start}}`);
       return;
     }
     if (event.topic === "enrollment.rejected") {
-      await this.mail.send(
+      const result = await this.mail.send(
         to,
         "Update on your enrollment application",
         `Dear ${String(p.parentName ?? "parent")},\n\nThank you for your interest. After review, we are unable to offer a place for ${String(p.childName ?? "your child")} at this time (reference ${String(p.reference ?? "")}). ${p.adminNotes ? `Notes: ${String(p.adminNotes)}` : ""}\n\nLittle Steps Nursery`,
       );
+      this.logger.log(`consumer.email.sent {topic: "enrollment.rejected", eventId: "${event.eventId}", mode: "${result.mode}", delivered: ${result.delivered}, durationMs: ${Date.now() - start}}`);
     }
   }
 }
@@ -175,7 +182,10 @@ export class FinancialEventConsumer extends BaseEventConsumer {
           data: { userId: String(p.parentUserId), type: "INVOICE", title, body, link: "/parent/invoices" },
         });
       }
-      if (p.parentEmail) await this.mail.send(String(p.parentEmail), title, body);
+      if (p.parentEmail) {
+        const result = await this.mail.send(String(p.parentEmail), title, body);
+        this.logger.log(`consumer.email.sent {topic: "invoice.created", eventId: "${event.eventId}", mode: "${result.mode}", delivered: ${result.delivered}}`);
+      }
       return;
     }
     // payment.received
@@ -186,6 +196,9 @@ export class FinancialEventConsumer extends BaseEventConsumer {
         data: { userId: String(p.parentUserId), type: "PAYMENT", title, body, link: "/parent/invoices" },
       });
     }
-    if (p.parentEmail) await this.mail.send(String(p.parentEmail), title, body);
+    if (p.parentEmail) {
+      const result = await this.mail.send(String(p.parentEmail), title, body);
+      this.logger.log(`consumer.email.sent {topic: "payment.received", eventId: "${event.eventId}", mode: "${result.mode}", delivered: ${result.delivered}}`);
+    }
   }
 }

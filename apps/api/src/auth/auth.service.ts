@@ -51,16 +51,21 @@ export class AuthService {
     const user = await this.validateUser(email, password);
     if (!user) throw new UnauthorizedException("Invalid credentials");
     await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
-    const tokens = await this.issueTokenPair(user.id, user.role.name, { ip, userAgent });
+    const tokens = await this.issueTokenPair(user.id, user.role.name, { ip, userAgent }, user.tokenVersion ?? 0);
     await this.audit.log({ actorId: user.id, action: "auth.login", entity: "User", entityId: user.id, ipAddress: ip });
     return { tokens, user: this.publicUser(user) };
   }
 
-  async issueTokenPair(userId: string, role: RoleName, meta: { ip?: string; userAgent?: string } = {}): Promise<TokenPair> {
+  async issueTokenPair(
+    userId: string,
+    role: RoleName,
+    meta: { ip?: string; userAgent?: string } = {},
+    tokenVersion = 0,
+  ): Promise<TokenPair> {
     const accessTtl = this.config.get("JWT_ACCESS_TTL", { infer: true });
     const refreshTtl = this.config.get("JWT_REFRESH_TTL", { infer: true });
     const accessToken = await this.jwt.signAsync(
-      { sub: userId, role },
+      { sub: userId, role, tv: tokenVersion },
       { secret: this.config.get("JWT_ACCESS_SECRET", { infer: true }), expiresIn: parseTtlMs(accessTtl) / 1000 },
     );
     const refreshToken = generateOpaqueToken(48);
@@ -98,7 +103,7 @@ export class AuthService {
     if (stored.expiresAt < new Date()) throw new UnauthorizedException("Refresh token expired");
     if (!stored.user.isActive || stored.user.deletedAt) throw new UnauthorizedException("Account not available");
 
-    const newPair = await this.issueTokenPair(stored.userId, stored.user.role.name, meta);
+    const newPair = await this.issueTokenPair(stored.userId, stored.user.role.name, meta, stored.user.tokenVersion ?? 0);
     const newHash = hashToken(newPair.refreshToken);
     const replacement = await this.prisma.refreshToken.findUnique({ where: { tokenHash: newHash } });
     await this.prisma.refreshToken.update({
@@ -149,7 +154,10 @@ export class AuthService {
     }
     const passwordHash = await argon2.hash(newPassword, { type: argon2.argon2id });
     await this.prisma.$transaction([
-      this.prisma.user.update({ where: { id: stored.userId }, data: { passwordHash, mustChangePassword: false } }),
+      this.prisma.user.update({
+        where: { id: stored.userId },
+        data: { passwordHash, mustChangePassword: false, tokenVersion: { increment: 1 } },
+      }),
       this.prisma.passwordResetToken.update({ where: { id: stored.id }, data: { usedAt: new Date() } }),
       this.prisma.refreshToken.updateMany({ where: { userId: stored.userId, revokedAt: null }, data: { revokedAt: new Date() } }),
     ]);
@@ -157,14 +165,25 @@ export class AuthService {
     return { message: "Password updated. Please sign in with your new password." };
   }
 
-  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+  async changePassword(userId: string, currentPassword: string, newPassword: string, confirmPassword?: string) {
+    // confirmPassword is required by ChangePasswordDto; when supplied it must
+    // match. Guard here as well so direct service callers cannot bypass it.
+    if (confirmPassword !== undefined && confirmPassword !== newPassword) {
+      throw new BadRequestException("Password confirmation does not match new password");
+    }
+    if (newPassword === currentPassword) {
+      throw new BadRequestException("New password must differ from current password");
+    }
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
     const ok = await argon2.verify(user.passwordHash, currentPassword).catch(() => false);
     if (!ok) throw new BadRequestException("Current password is incorrect");
     const passwordHash = await argon2.hash(newPassword, { type: argon2.argon2id });
     await this.prisma.$transaction([
-      this.prisma.user.update({ where: { id: userId }, data: { passwordHash, mustChangePassword: false } }),
+      this.prisma.user.update({
+        where: { id: userId },
+        data: { passwordHash, mustChangePassword: false, tokenVersion: { increment: 1 } },
+      }),
       this.prisma.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } }),
     ]);
     await this.audit.log({ actorId: userId, action: "auth.password_changed", entity: "User", entityId: userId });
