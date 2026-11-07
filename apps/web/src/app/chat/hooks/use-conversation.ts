@@ -6,6 +6,14 @@ import { chatRequest, API_BASE, refreshChatSession } from "../chat-api";
 import type { ChatMessage } from "../chat-types";
 import { CHAT_CLIENT_EVENTS, CHAT_SERVER_EVENTS } from "../socket-events";
 
+function normalizeMessage<T extends ChatMessage>(msg: T): T {
+  const sender = (msg as { sender?: { role?: unknown } | null })?.sender;
+  if (!sender?.role || typeof sender.role === "string") return msg;
+  const name = (sender.role as { name?: unknown }).name;
+  if (typeof name !== "string") return msg;
+  return { ...msg, sender: { ...sender, role: name } as T["sender"] };
+}
+
 export function useConversation(
   socket: Socket | null,
   conversationId: string | null,
@@ -81,9 +89,10 @@ export function useConversation(
     )
       .then((history) => {
         if (!active) return;
-        setStoredMessages({ conversationId, items: history });
+        const normalized = (history ?? []).map(normalizeMessage);
+        setStoredMessages({ conversationId, items: normalized });
         setErrorState({ conversationId, message: null });
-        for (const message of history) {
+        for (const message of normalized) {
           if (
             message.senderId !== currentUserId &&
             !message.receipts.some(
@@ -118,10 +127,11 @@ export function useConversation(
     if (socket.connected) join();
     socket.on("connect", join);
     const onMessage = (message: ChatMessage) => {
-      if (message.conversationId !== conversationId) return;
-      addMessage(message);
-      if (message.senderId !== currentUserId) {
-        socket.emit(CHAT_CLIENT_EVENTS.DELIVERED, { messageId: message.id });
+      const normalized = normalizeMessage(message);
+      if (normalized.conversationId !== conversationId) return;
+      addMessage(normalized);
+      if (normalized.senderId !== currentUserId) {
+        socket.emit(CHAT_CLIENT_EVENTS.DELIVERED, { messageId: normalized.id });
         socket.emit(CHAT_CLIENT_EVENTS.READ, { conversationId });
       }
     };
@@ -223,7 +233,7 @@ export function useConversation(
             },
           );
       });
-      addMessage(result);
+      addMessage(normalizeMessage(result));
     },
     [socket, conversationId, addMessage],
   );
@@ -241,7 +251,7 @@ export function useConversation(
           body,
         },
       );
-      addMessage(message);
+      addMessage(normalizeMessage(message));
     },
     [conversationId, addMessage],
   );
@@ -254,7 +264,7 @@ export function useConversation(
       const older = await chatRequest<ChatMessage[]>(
         `/messaging/conversations/${conversationId}/messages?before=${before}`,
       );
-      updateMessages((current) => [...older, ...current]);
+      updateMessages((current) => [...(older ?? []).map(normalizeMessage), ...current]);
     } catch (cause) {
       setErrorState({ conversationId, message: (cause as Error).message });
     } finally {

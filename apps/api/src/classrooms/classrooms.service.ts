@@ -16,8 +16,19 @@ export class ClassroomsService {
     private readonly audit: AuditService,
   ) {}
 
-  async list() {
+  async list(user?: AuthenticatedUser) {
+    let where: Record<string, unknown> | undefined;
+    if (user && (user.role === "TEACHER" || user.role === "STAFF")) {
+      const assignments = await this.prisma.classroomStaff.findMany({ where: { staff: { userId: user.id } }, select: { classroomId: true } });
+      const ids = assignments.map((a) => a.classroomId);
+      where = { id: { in: ids } };
+    } else if (user && user.role === "PARENT") {
+      const links = await this.prisma.childParent.findMany({ where: { parent: { userId: user.id } }, select: { child: { select: { classroomId: true } } } });
+      const ids = [...new Set(links.map((l) => l.child.classroomId).filter(Boolean))] as string[];
+      where = { id: { in: ids } };
+    }
     const classrooms = await this.prisma.classroom.findMany({
+      where,
       include: {
         teachers: { include: { staff: { include: { user: { select: { firstName: true, lastName: true } } } } } },
         _count: { select: { children: { where: { deletedAt: null, status: "ACTIVE" } } } },
@@ -27,7 +38,7 @@ export class ClassroomsService {
     return classrooms.map((c) => this.serialize(c));
   }
 
-  async get(id: string) {
+  async get(id: string, user?: AuthenticatedUser) {
     const classroom = await this.prisma.classroom.findUnique({
       where: { id },
       include: {
@@ -37,6 +48,14 @@ export class ClassroomsService {
       },
     });
     if (!classroom) throw new NotFoundException("Classroom not found");
+    if (user && (user.role === "TEACHER" || user.role === "STAFF")) {
+      const assignment = await this.prisma.classroomStaff.findFirst({ where: { classroomId: id, staff: { userId: user.id } } });
+      if (!assignment) throw new NotFoundException("Classroom not found");
+    }
+    if (user && user.role === "PARENT") {
+      const link = await this.prisma.childParent.findFirst({ where: { child: { classroomId: id }, parent: { userId: user.id } } });
+      if (!link) throw new NotFoundException("Classroom not found");
+    }
     return this.serialize(classroom, true);
   }
 

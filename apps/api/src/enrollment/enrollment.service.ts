@@ -106,13 +106,19 @@ export class EnrollmentService {
         medicalNotes: dto.medicalNotes?.trim() || null,
         additionalInfo: dto.additionalInfo?.trim() || null,
       },
-      select: { reference: true, status: true, createdAt: true },
+      select: { id: true, reference: true, status: true, createdAt: true },
     });
 
     await this.audit.log({
       action: "enrollment_application.submitted",
       entity: "EnrollmentApplication",
       metadata: { reference: application.reference },
+    });
+    await this.outbox.enqueue("enrollment.submitted", {
+      id: application.id,
+      reference: application.reference,
+      parentEmail: dto.parentEmail.trim().toLowerCase(),
+      childName: `${dto.childFirstName.trim()} ${dto.childLastName.trim()}`,
     });
     return application;
   }
@@ -145,6 +151,40 @@ export class EnrollmentService {
       this.prisma.enrollmentApplication.count({ where }),
     ]);
     return toPage(items, total, page, pageSize);
+  }
+
+  async myApplications(parentEmail: string, query: QueryEnrollmentApplicationsDto) {
+    const { skip, take, page, pageSize } = normalizePage(query);
+    const email = parentEmail.toLowerCase().trim();
+    const where = {
+      parentEmail: email,
+      ...(query.status ? { status: query.status } : {}),
+    };
+    const [items, total] = await Promise.all([
+      this.prisma.enrollmentApplication.findMany({
+        where,
+        select: {
+          id: true,
+          reference: true,
+          childFirstName: true,
+          childLastName: true,
+          requestedProgram: true,
+          requestedStartDate: true,
+          status: true,
+          createdAt: true,
+          adminNotes: true,
+        },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take,
+      }),
+      this.prisma.enrollmentApplication.count({ where }),
+    ]);
+    const safe = items.map((a) => ({
+      ...a,
+      adminNotes: a.status === "REJECTED" ? a.adminNotes : null,
+    }));
+    return toPage(safe, total, page, pageSize);
   }
 
   async get(id: string) {

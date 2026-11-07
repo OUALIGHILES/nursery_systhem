@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { validateEnv } from './config/env.js';
@@ -22,6 +23,7 @@ import { MealsModule } from './meals/meals.module.js';
 import { ParentsModule } from './parents/parents.module.js';
 import { StaffModule } from './staff/staff.module.js';
 import { UsersModule } from './users/users.module.js';
+import { NotificationsModule } from './notifications/notifications.module.js';
 import { EnrollmentModule } from './enrollment/enrollment.module.js';
 import { MailAdminModule } from './common/mail.admin.module.js';
 import { OutboxAdminModule } from './worker/outbox.admin.module.js';
@@ -30,6 +32,7 @@ import { OutboxAdminModule } from './worker/outbox.admin.module.js';
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     JwtModule.register({}),
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
     PrismaModule,
     CommonModule,
     AccessModule,
@@ -46,12 +49,14 @@ import { OutboxAdminModule } from './worker/outbox.admin.module.js';
     StaffModule,
     UsersModule,
     EnrollmentModule,
+    NotificationsModule,
     MailAdminModule,
     OutboxAdminModule,
   ],
   controllers: [AppController],
   providers: [
     AppService,
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],

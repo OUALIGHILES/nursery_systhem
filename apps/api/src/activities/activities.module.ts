@@ -154,7 +154,7 @@ class ActivitiesService {
     return toPage(items, total, page, pageSize);
   }
 
-  async get(id: string) {
+  async get(id: string, user?: AuthenticatedUser) {
     const activity = await this.prisma.activity.findUnique({
       where: { id },
       include: {
@@ -163,6 +163,12 @@ class ActivitiesService {
       },
     });
     if (!activity) throw new NotFoundException("Activity not found");
+    if (user && !isStaffRole(user.role)) {
+      const visibleIds = await this.access.visibleChildIds(user);
+      const children = await this.prisma.child.findMany({ where: { id: { in: visibleIds } }, select: { classroomId: true } });
+      const allowed = new Set(children.map((c) => c.classroomId).filter(Boolean));
+      if (!activity.classroomId || !allowed.has(activity.classroomId)) throw new NotFoundException("Activity not found");
+    }
     return activity;
   }
 
@@ -242,18 +248,17 @@ export class ActivitiesController {
 
   @Get(":id")
   get(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
-    void user;
-    return this.activities.get(id);
+    return this.activities.get(id, user);
   }
 
   @Post()
-  @Roles("SUPER_ADMIN", "ADMIN", "DIRECTOR", "TEACHER")
+  @Roles("SUPER_ADMIN", "ADMIN", "DIRECTOR", "TEACHER", "STAFF")
   create(@Body() dto: CreateActivityDto, @CurrentUser() actor: AuthenticatedUser) {
     return this.activities.create(dto, actor);
   }
 
   @Patch(":id")
-  @Roles("SUPER_ADMIN", "ADMIN", "DIRECTOR", "TEACHER")
+  @Roles("SUPER_ADMIN", "ADMIN", "DIRECTOR", "TEACHER", "STAFF")
   update(@Param("id") id: string, @Body() dto: UpdateActivityDto, @CurrentUser() actor: AuthenticatedUser) {
     return this.activities.update(id, dto, actor);
   }

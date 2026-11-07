@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Quality (unit, lint, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: nursery
+          POSTGRES_PASSWORD: test-password
+          POSTGRES_DB: nursery_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U nursery"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://nursery:test-password@localhost:5433/nursery_test?schema=public
+      INTEGRATION_DATABASE_URL: postgresql://nursery:test-password@localhost:5433/nursery_test?schema=public
+      REDIS_URL: redis://localhost:6379
+      KAFKA_BROKERS: ""
+      JWT_ACCESS_SECRET: test-secret-that-is-at-least-thirty-two-chars-long
+      JWT_REFRESH_SECRET: test-secret-that-is-at-least-thirty-two-chars-long
+      SMTP_HOST: ""
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npm run build -w @nursery/shared
+      - run: npx prisma generate
+        working-directory: apps/api
+      - run: npx prisma validate
+        working-directory: apps/api
+      - run: npx prisma migrate deploy
+        working-directory: apps/api
+      - run: npm test -w api
+      - run: npm run lint -w api
+      - run: npm run build -w api
+      - run: npm run lint -w web
+      - run: npm run build -w web
+      - run: npm run test:integration -w api
+      - run: docker build -f apps/api/Dockerfile -t nursery-api:ci .
+      - run: docker build -f apps/web/Dockerfile -t nursery-web:ci .
+      - run: docker compose -f docker-compose.production.yml config

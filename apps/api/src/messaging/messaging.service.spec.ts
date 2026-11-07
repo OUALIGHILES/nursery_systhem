@@ -15,9 +15,11 @@ describe('MessagingService', () => {
   let prisma: {
     user: { findFirst: ReturnType<typeof vi.fn> };
     classroomStaff: { findFirst: ReturnType<typeof vi.fn> };
+    messageReceipt: { count: ReturnType<typeof vi.fn> };
     $transaction: ReturnType<typeof vi.fn>;
   };
   let repository: {
+    listConversations: ReturnType<typeof vi.fn>;
     findConversation: ReturnType<typeof vi.fn>;
     findExistingDirect: ReturnType<typeof vi.fn>;
     createConversation: ReturnType<typeof vi.fn>;
@@ -26,6 +28,7 @@ describe('MessagingService', () => {
   };
   let access: { assertChildAccess: ReturnType<typeof vi.fn> };
   let outbox: { enqueue: ReturnType<typeof vi.fn> };
+  let redis: { client: { incr: ReturnType<typeof vi.fn>; expire: ReturnType<typeof vi.fn> }; isOnline: ReturnType<typeof vi.fn> };
 
   const parent: AuthenticatedUser = {
     id: 'parent-id',
@@ -41,9 +44,11 @@ describe('MessagingService', () => {
     prisma = {
       user: { findFirst: vi.fn() },
       classroomStaff: { findFirst: vi.fn() },
+      messageReceipt: { count: vi.fn().mockResolvedValue(0) },
       $transaction: vi.fn(),
     };
     repository = {
+      listConversations: vi.fn(),
       findConversation: vi.fn(),
       findExistingDirect: vi.fn(),
       createConversation: vi.fn(),
@@ -52,6 +57,10 @@ describe('MessagingService', () => {
     };
     access = { assertChildAccess: vi.fn() };
     outbox = { enqueue: vi.fn() };
+    redis = {
+      client: { incr: vi.fn().mockResolvedValue(1), expire: vi.fn() },
+      isOnline: vi.fn().mockResolvedValue(false),
+    };
     moduleRef = await Test.createTestingModule({
       providers: [
         MessagingService,
@@ -65,10 +74,7 @@ describe('MessagingService', () => {
         { provide: OutboxService, useValue: outbox },
         {
           provide: RedisService,
-          useValue: {
-            client: { incr: vi.fn().mockResolvedValue(1), expire: vi.fn() },
-            isOnline: vi.fn(),
-          },
+          useValue: redis,
         },
         {
           provide: ConfigService,
@@ -148,5 +154,28 @@ describe('MessagingService', () => {
       tokenVersion: 0,
     });
     await expect(service.authenticateSocketUser('parent-id', 0)).rejects.toThrow('Password change required');
+  });
+
+  it('listConversations returns peer.role as a string, not {name} object (chat-client replaceAll regression)', async () => {
+    repository.listConversations.mockResolvedValue({
+      total: 1,
+      items: [
+        {
+          id: 'conv-1',
+          type: 'PARENT_ADMIN',
+          childId: null,
+          updatedAt: new Date(),
+          participants: [
+            { userId: 'parent-id', user: { id: 'parent-id', firstName: 'Taylor', lastName: 'Parent', role: { name: 'PARENT' } } },
+            { userId: 'admin-id', user: { id: 'admin-id', firstName: 'Ada', lastName: 'Admin', role: { name: 'SUPER_ADMIN' } } },
+          ],
+          messages: [],
+        },
+      ],
+    });
+    const page = await service.listConversations(parent, { page: 1, pageSize: 10 });
+    const peer = page.items[0].peer as { role: unknown };
+    expect(peer.role).toBe('SUPER_ADMIN');
+    expect(typeof (peer.role as string).replaceAll).toBe('function');
   });
 });

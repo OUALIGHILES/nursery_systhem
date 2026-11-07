@@ -1,8 +1,15 @@
+export type ChatRole = string | { name: string };
+
 export interface ChatPeer {
   id: string;
   firstName: string;
   lastName: string;
-  role: string;
+  role: ChatRole;
+}
+
+export function roleLabel(role: ChatRole | string | null | undefined): string {
+  const raw = typeof role === "string" ? role : (role?.name ?? "");
+  return raw.replaceAll("_", " ").toLowerCase();
 }
 
 export interface ChatAttachment {

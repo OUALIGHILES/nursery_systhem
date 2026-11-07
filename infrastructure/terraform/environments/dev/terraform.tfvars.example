@@ -1,0 +1,6 @@
+environment    = "dev"
+cloud_provider = "TODO"
+region         = "TODO"
+vpc_cidr       = "10.10.0.0/16"
+domain         = "TODO"
+image_tag      = "TODO"

@@ -5,8 +5,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { apiRequest, getPageItems, isRecord } from "../lib/api";
+import ChatClient from "../app/chat/chat-client";
+import { AttendanceManager } from "./attendance-manager";
+import { ChildManager } from "./child-manager";
+import { DailyReport } from "./daily-report";
+import { NotificationBell } from "./notifications/NotificationBell";
+import { NotificationCenter } from "./notifications/NotificationCenter";
 
-type Portal = "admin" | "parent" | "staff";
+type Portal = "admin" | "parent" | "staff" | "teacher";
 type Session = {
   id: string;
   firstName: string;
@@ -150,15 +156,19 @@ const adminSections: Record<string, Section> = {
   calendar: { label: "Calendar", description: "Calendar event management is not yet available through the current API." },
   documents: { label: "Documents", description: "Private document management is not yet available through the current API." },
   messages: { label: "Messages", description: "Secure conversations with your nursery community." },
+  notifications: { label: "Notifications", description: "Enrollment, activity and operational alerts for your nursery." },
 };
 
 const parentSections: Record<string, Section> = {
   dashboard: { label: "My nursery", description: "Your family’s nursery updates and everyday essentials." },
   children: { label: "My children", description: "Profiles for children linked to your account.", endpoint: "/children?page=1&pageSize=50", columns: ["firstName", "lastName", "dateOfBirth", "status", "classroom.name"] },
+  applications: { label: "My Applications", description: "Track your enrollment applications and their status.", endpoint: "/enrollment-applications/my-applications?page=1&pageSize=50", columns: ["reference", "childFirstName", "childLastName", "requestedProgram", "requestedStartDate", "status", "createdAt"] },
   attendance: { label: "Attendance", description: "Attendance records for your linked children.", endpoint: `/attendance?date=${new Date().toISOString().slice(0, 10)}&page=1&pageSize=50`, columns: ["child.firstName", "child.lastName", "date", "status", "checkInAt", "checkOutAt"] },
+  daily: { label: "Daily Reports", description: "Daily activities and meals for your linked children." },
   meals: { label: "Meals", description: "Current menu and available meal information.", endpoint: `/meals?date=${new Date().toISOString().slice(0, 10)}&page=1&pageSize=50`, columns: ["name", "mealType", "date", "description", "allergens"] },
   invoices: { label: "Invoices", description: "Your invoices and payment history.", endpoint: "/billing/invoices?page=1&pageSize=50", columns: ["number", "total", "currency", "status", "dueDate"] },
   messages: { label: "Messages", description: "Keep in touch with your child’s nursery team." },
+  notifications: { label: "Notifications", description: "Enrollment, attendance and nursery updates for your family." },
   calendar: { label: "Calendar", description: "School events and family meetings are not yet available through the current API." },
   documents: { label: "Documents", description: "Private family document access is not yet available through the current API." },
 };
@@ -167,7 +177,8 @@ const staffSections: Record<string, Section> = {
   dashboard: { label: "My day", description: "Your classroom work and today’s care operations." },
   children: { label: "My children", description: "Children in your assigned classrooms.", endpoint: "/children?page=1&pageSize=50", columns: ["firstName", "lastName", "dateOfBirth", "status", "classroom.name"] },
   attendance: { label: "Attendance", description: "Record and review attendance for assigned children.", endpoint: `/attendance?date=${new Date().toISOString().slice(0, 10)}&page=1&pageSize=50`, columns: ["child.firstName", "child.lastName", "date", "status", "checkInAt", "checkOutAt"] },
-  activities: { label: "Activities", description: "Today’s classroom activities.", endpoint: "/activities?page=1&pageSize=50", columns: ["title", "scheduledAt", "durationMin", "classroom.name"] },
+  activities: { label: "Activities", description: "Today's classroom activities.", endpoint: "/activities?page=1&pageSize=50", columns: ["title", "scheduledAt", "durationMin", "classroom.name"] },
+  daily: { label: "Daily Activities & Meals", description: "Record daily activities and meals for assigned classrooms." },
   meals: { label: "Meals", description: "Current meal schedule and classroom records.", endpoint: `/meals?date=${new Date().toISOString().slice(0, 10)}&page=1&pageSize=50`, columns: ["name", "mealType", "date", "description", "allergens"] },
   messages: { label: "Messages", description: "Secure conversations with families and colleagues." },
   incidents: {
@@ -187,22 +198,24 @@ const staffSections: Record<string, Section> = {
 };
 
 const navByPortal: Record<Portal, string[]> = {
-  admin: ["dashboard", "children", "parents", "staff", "classrooms", "attendance", "activities", "meals", "invoices", "plans", "reports", "admissions", "health", "calendar", "documents", "messages", "users"],
-  parent: ["dashboard", "children", "attendance", "meals", "invoices", "calendar", "documents", "messages"],
-  staff: ["dashboard", "children", "attendance", "activities", "meals", "incidents", "calendar", "messages"],
+  admin: ["dashboard", "children", "parents", "staff", "classrooms", "attendance", "activities", "meals", "invoices", "plans", "reports", "admissions", "health", "notifications", "calendar", "documents", "messages", "users"],
+  parent: ["dashboard", "children", "applications", "attendance", "daily", "meals", "invoices", "notifications", "calendar", "documents", "messages"],
+  staff: ["dashboard", "children", "attendance", "activities", "daily", "meals", "incidents", "calendar", "messages"],
+  teacher: ["dashboard", "children", "attendance", "activities", "daily", "meals", "incidents", "calendar", "messages"],
 };
 
 const sectionsByPortal: Record<Portal, Record<string, Section>> = {
   admin: adminSections,
   parent: parentSections,
   staff: staffSections,
+  teacher: staffSections,
 };
 
 const roleHome: Record<string, string> = {
   SUPER_ADMIN: "/admin",
   ADMIN: "/admin",
   DIRECTOR: "/admin",
-  TEACHER: "/staff",
+  TEACHER: "/teacher",
   STAFF: "/staff",
   PARENT: "/parent",
 };
@@ -210,6 +223,7 @@ const roleHome: Record<string, string> = {
 const rolesByPortal: Record<Portal, string[]> = {
   admin: ["SUPER_ADMIN", "ADMIN", "DIRECTOR"],
   staff: ["TEACHER", "STAFF", "DIRECTOR", "ADMIN", "SUPER_ADMIN"],
+  teacher: ["TEACHER"],
   parent: ["PARENT"],
 };
 
@@ -217,7 +231,14 @@ const portalTitles: Record<Portal, string> = {
   admin: "Administration",
   parent: "Family portal",
   staff: "Staff workspace",
+  teacher: "Teacher workspace",
 };
+
+function sectionHref(portal: Portal, key: string): string {
+  if (key === "dashboard") return `/${portal}`;
+  if (key === "messages") return `/${portal}/messages`;
+  return `/${portal}/${key}`;
+}
 
 function getValue(row: Record<string, unknown>, path: string): unknown {
   return path.split(".").reduce<unknown>((current, key) => {
@@ -258,6 +279,10 @@ export function PortalWorkspace({ portal, section: sectionProp = "dashboard" }: 
   const [planOptions, setPlanOptions] = useState<Record<string, unknown>[]>([]);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewSaving, setReviewSaving] = useState(false);
+  const [admissionsStatus, setAdmissionsStatus] = useState("");
+  const [admissionsPage, setAdmissionsPage] = useState(1);
+  const [admissionsTotal, setAdmissionsTotal] = useState(0);
+  const [admissionsTotalPages, setAdmissionsTotalPages] = useState(1);
   const sectionName = sectionProp || "dashboard";
   const sections = sectionsByPortal[portal];
   const section = sections[sectionName];
@@ -289,6 +314,7 @@ export function PortalWorkspace({ portal, section: sectionProp = "dashboard" }: 
 
   const refresh = useCallback(async () => {
     if (!session) return;
+    if (sectionName === "attendance" || sectionName === "messages" || sectionName === "children" || sectionName === "daily") return;
     await Promise.resolve();
     setLoading(true);
     setError(null);
@@ -296,7 +322,7 @@ export function PortalWorkspace({ portal, section: sectionProp = "dashboard" }: 
       if (sectionName === "dashboard") {
         const checks = portal === "admin"
           ? [["children", "/children?page=1&pageSize=1"], ["parents", "/parents?page=1&pageSize=1"], ["staff", "/staff?page=1&pageSize=1"], ["classrooms", "/classrooms"], ["attendance", `/attendance?date=${new Date().toISOString().slice(0, 10)}&page=1&pageSize=100`], ["invoices", "/billing/invoices?page=1&pageSize=100"]]
-          : portal === "staff"
+          : portal === "staff" || portal === "teacher"
             ? [["children", "/children?page=1&pageSize=1"], ["attendance", `/attendance?date=${new Date().toISOString().slice(0, 10)}&page=1&pageSize=100`], ["activities", "/activities?page=1&pageSize=100"], ["meals", `/meals?date=${new Date().toISOString().slice(0, 10)}&page=1&pageSize=100`]]
             : [["children", "/children?page=1&pageSize=1"], ["attendance", `/attendance?date=${new Date().toISOString().slice(0, 10)}&page=1&pageSize=100`], ["invoices", "/billing/invoices?page=1&pageSize=100"], ["meals", `/meals?date=${new Date().toISOString().slice(0, 10)}&page=1&pageSize=100`]];
         const results = await Promise.allSettled(checks.map(([, endpoint]) => apiRequest<unknown>(endpoint)));
@@ -316,9 +342,22 @@ export function PortalWorkspace({ portal, section: sectionProp = "dashboard" }: 
         setRows([]);
         if (failures === results.length) setError("The dashboard could not load data from the API.");
       } else if (section?.endpoint) {
-        const result = await apiRequest<unknown>(section.endpoint);
+        let endpoint = section.endpoint;
+        if (sectionName === "admissions" && portal === "admin") {
+          const params = new URLSearchParams({ page: String(admissionsPage), pageSize: "20" });
+          if (admissionsStatus) params.set("status", admissionsStatus);
+          if (search.trim()) params.set("q", search.trim());
+          endpoint = `/enrollment-applications?${params.toString()}`;
+        }
+        const result = await apiRequest<unknown>(endpoint);
         setRows(getPageItems(result));
-        if (isRecord(result) && typeof result.total === "number") {
+        if (sectionName === "admissions" && isRecord(result)) {
+          if (typeof result.total === "number") {
+            setAdmissionsTotal(result.total);
+            setAdmissionsTotalPages(typeof result.totalPages === "number" ? result.totalPages : Math.max(1, Math.ceil(result.total / 20)));
+          }
+          setSummary({ total: typeof result.total === "number" ? result.total : getPageItems(result).length });
+        } else if (isRecord(result) && typeof result.total === "number") {
           setSummary({ total: result.total });
         } else {
           setSummary({});
@@ -333,7 +372,7 @@ export function PortalWorkspace({ portal, section: sectionProp = "dashboard" }: 
     } finally {
       setLoading(false);
     }
-  }, [session, sectionName, portal, section]);
+  }, [session, sectionName, portal, section, admissionsStatus, admissionsPage, search]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => { void refresh(); }, 0);
@@ -341,10 +380,11 @@ export function PortalWorkspace({ portal, section: sectionProp = "dashboard" }: 
   }, [refresh]);
 
   const filteredRows = useMemo(() => {
+    if (sectionName === "admissions" && portal === "admin") return rows;
     const query = search.trim().toLowerCase();
     if (!query) return rows;
     return rows.filter((row) => JSON.stringify(row).toLowerCase().includes(query));
-  }, [rows, search]);
+  }, [rows, search, sectionName, portal]);
 
   async function submitCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -459,7 +499,7 @@ export function PortalWorkspace({ portal, section: sectionProp = "dashboard" }: 
   const title = section.label;
   const dashboardStats = portal === "admin"
     ? [["Children enrolled", summary.children], ["Parents", summary.parents], ["Staff members", summary.staff], ["Classrooms", summary.classrooms], ["Attendance today", summary.attendance], ["Invoices", summary.invoices]]
-    : portal === "staff"
+    : portal === "staff" || portal === "teacher"
       ? [["My children", summary.children], ["Attendance today", summary.attendance], ["Activities", summary.activities], ["Meals today", summary.meals]]
       : [["My children", summary.children], ["Attendance today", summary.attendance], ["My invoices", summary.invoices], ["Today’s meals", summary.meals]];
   const reviewDetails: [string, unknown][] = reviewApplication
@@ -492,7 +532,7 @@ export function PortalWorkspace({ portal, section: sectionProp = "dashboard" }: 
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 pb-5">
           {nav.map((key) => {
             const item = sections[key];
-            const href = key === "dashboard" ? `/${portal}` : `/${portal}/${key}`;
+            const href = sectionHref(portal, key);
             const active = sectionName === key;
             return <Link key={key} href={href} aria-current={active ? "page" : undefined} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${isAdmin ? active ? "bg-[#293d35] text-white shadow-[0_8px_18px_rgba(41,61,53,0.12)]" : "text-[#647069] hover:bg-[#edf2ea] hover:text-[#293d35]" : active ? "bg-[#eaf5ee] text-[#286b4d]" : "text-[#61746c] hover:bg-[#f5f8f6] hover:text-[#17342d]"}`}><NavIcon name={key} active={active} /><span>{item?.label ?? key}</span>{isAdmin && key === "admissions" && <span className={`ml-auto size-1.5 rounded-full ${active ? "bg-[#e9a88e]" : "bg-[#788f75]"}`} />}</Link>;
           })}
@@ -509,7 +549,8 @@ export function PortalWorkspace({ portal, section: sectionProp = "dashboard" }: 
             <div className="min-w-0"><p className="truncate text-sm font-bold">{isAdmin ? "Nursery management" : portalTitles[portal]}</p><p className="truncate text-xs text-[#829189]">{session.firstName} {session.lastName} · {session.role.replaceAll("_", " ")}</p></div>
           </div>
           <div className="flex items-center gap-3">
-            <Link href="/chat" className={`hidden rounded-full border px-4 py-2 text-xs font-semibold transition sm:inline-flex ${isAdmin ? "border-[#d7d9cd] text-[#526b55] hover:bg-white" : "rounded-xl border-[#e4ebe7] text-[#52675e] hover:bg-[#f6faf7]"}`}>Open messages</Link>
+            {portal === "admin" ? <NotificationBell portal="admin" /> : portal === "parent" ? <NotificationBell portal="parent" /> : null}
+            <Link href={sectionHref(portal, "messages")} className={`hidden rounded-full border px-4 py-2 text-xs font-semibold transition sm:inline-flex ${isAdmin ? "border-[#d7d9cd] text-[#526b55] hover:bg-white" : "rounded-xl border-[#e4ebe7] text-[#52675e] hover:bg-[#f6faf7]"}`}>Open messages</Link>
             <button type="button" onClick={() => void signOut()} className="rounded-xl px-3 py-2 text-xs font-semibold text-[#52675e] hover:bg-[#f6faf7] lg:hidden">Sign out</button>
             <div className="grid size-9 place-items-center rounded-full bg-[#dff2e6] text-xs font-bold text-[#286b4d]">{session.firstName[0]}{session.lastName[0]}</div>
           </div>
@@ -563,7 +604,19 @@ export function PortalWorkspace({ portal, section: sectionProp = "dashboard" }: 
             </div>
           )}
 
-          {sectionName === "dashboard" ? isAdmin ? (
+          {sectionName === "messages" ? (
+            <ChatClient homeHref={`/${portal}`} embedded />
+          ) : sectionName === "notifications" && isAdmin ? (
+            <NotificationCenter portal="admin" />
+          ) : sectionName === "notifications" && portal === "parent" ? (
+            <NotificationCenter portal="parent" />
+          ) : sectionName === "attendance" ? (
+            <AttendanceManager portal={portal} />
+          ) : sectionName === "daily" ? (
+            <DailyReport portal={portal} />
+          ) : sectionName === "children" ? (
+            <ChildManager portal={portal} />
+          ) : sectionName === "dashboard" ? isAdmin ? (
             <div className="space-y-9">
               <section className="admin-home-hero grid items-center gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:gap-10">
                 <div className="relative z-10 py-2">
@@ -658,7 +711,7 @@ export function PortalWorkspace({ portal, section: sectionProp = "dashboard" }: 
                   </div>
                   <div className="mt-6 grid gap-3 sm:grid-cols-2">
                     {nav.filter((key) => key !== "dashboard").slice(0, 8).map((key) => (
-                      <Link key={key} href={`/admin/${key}`} className="group flex items-center gap-3 rounded-2xl border border-[#e8e6dc] bg-[#fffdf8] p-3.5 transition hover:-translate-y-0.5 hover:border-[#c8d3c4] hover:bg-[#edf2ea]">
+                      <Link key={key} href={sectionHref(portal, key)} className="group flex items-center gap-3 rounded-2xl border border-[#e8e6dc] bg-[#fffdf8] p-3.5 transition hover:-translate-y-0.5 hover:border-[#c8d3c4] hover:bg-[#edf2ea]">
                         <span className="grid size-10 place-items-center rounded-full bg-white text-[#526b55] shadow-sm"><NavIcon name={key} /></span>
                         <span className="text-sm font-semibold text-[#293d35]">{sections[key]?.label}</span>
                         <span className="ml-auto text-[#9a9d94] transition group-hover:translate-x-1 group-hover:text-[#526b55]">→</span>
@@ -688,7 +741,7 @@ export function PortalWorkspace({ portal, section: sectionProp = "dashboard" }: 
                 {dashboardStats.map(([label, count]) => <article key={String(label)} className="rounded-2xl border border-[#e5ece8] bg-white p-5 shadow-[0_8px_28px_rgba(30,60,46,0.035)]"><div className="flex items-center justify-between"><span className="text-sm font-medium text-[#708079]">{label}</span><span className="grid size-9 place-items-center rounded-xl bg-[#f0f7f2] text-[#42815e]"><NavIcon name={String(label)} /></span></div><div className="mt-4 text-3xl font-black tracking-tight">{loading ? "—" : count ?? "—"}</div><div className="mt-1 text-xs text-[#9aa8a1]">{count === undefined ? "No data available" : "Live from the database"}</div></article>)}
               </section>
               <section className="grid gap-5 xl:grid-cols-[1.4fr_0.8fr]">
-                <div className="rounded-2xl border border-[#e5ece8] bg-white p-5 sm:p-6"><div className="flex items-center justify-between"><div><h3 className="font-bold">Today at a glance</h3><p className="mt-1 text-xs text-[#87958e]">Operational shortcuts</p></div><span className="rounded-full bg-[#f0f7f2] px-3 py-1 text-[11px] font-semibold text-[#43815f]">{new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}</span></div><div className="mt-5 grid gap-3 sm:grid-cols-2">{nav.filter((key) => key !== "dashboard").slice(0, 6).map((key) => <Link key={key} href={`/${portal}/${key}`} className="flex items-center gap-3 rounded-xl border border-[#edf1ee] p-3 transition hover:border-[#cfe2d6] hover:bg-[#f8fbf9]"><span className="grid size-9 place-items-center rounded-xl bg-[#eff7f1] text-[#367351]"><NavIcon name={key} /></span><span className="text-sm font-semibold">{sections[key]?.label}</span><span className="ml-auto text-[#97a69f]">→</span></Link>)}</div></div>
+                <div className="rounded-2xl border border-[#e5ece8] bg-white p-5 sm:p-6"><div className="flex items-center justify-between"><div><h3 className="font-bold">Today at a glance</h3><p className="mt-1 text-xs text-[#87958e]">Operational shortcuts</p></div><span className="rounded-full bg-[#f0f7f2] px-3 py-1 text-[11px] font-semibold text-[#43815f]">{new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}</span></div><div className="mt-5 grid gap-3 sm:grid-cols-2">{nav.filter((key) => key !== "dashboard").slice(0, 6).map((key) => <Link key={key} href={sectionHref(portal, key)} className="flex items-center gap-3 rounded-xl border border-[#edf1ee] p-3 transition hover:border-[#cfe2d6] hover:bg-[#f8fbf9]"><span className="grid size-9 place-items-center rounded-xl bg-[#eff7f1] text-[#367351]"><NavIcon name={key} /></span><span className="text-sm font-semibold">{sections[key]?.label}</span><span className="ml-auto text-[#97a69f]">→</span></Link>)}</div></div>
                 <div className="rounded-2xl border border-[#e5ece8] bg-white p-5 sm:p-6"><h3 className="font-bold">Getting started</h3><p className="mt-1 text-xs leading-5 text-[#87958e]">Use the navigation to manage your work. Access is limited by the role assigned to your account.</p><div className="mt-5 space-y-3">{[["Review records", "Open a section to see current data."], ["Keep things current", "Use refresh after changes."], ["Need help?", "Contact nursery administration."]].map(([heading, detail]) => <div key={heading} className="flex gap-3"><span className="mt-1 grid size-5 shrink-0 place-items-center rounded-full bg-[#e9f5ed] text-[10px] font-bold text-[#367351]">✓</span><div><div className="text-sm font-semibold">{heading}</div><div className="mt-0.5 text-xs leading-5 text-[#83928b]">{detail}</div></div></div>)}</div></div>
               </section>
             </div>
@@ -701,9 +754,21 @@ export function PortalWorkspace({ portal, section: sectionProp = "dashboard" }: 
                     <circle cx="10.8" cy="10.8" r="6.8" />
                     <path d="m16 16 4 4" />
                   </svg>
-                  <input aria-label={`Search ${title}`} type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${title.toLowerCase()}`} className="w-full bg-transparent outline-none sm:w-56" />
+                  <input aria-label={`Search ${title}`} type="search" value={search} onChange={(event) => { setSearch(event.target.value); if (sectionName === "admissions" && portal === "admin") setAdmissionsPage(1); }} placeholder={`Search ${title.toLowerCase()}`} className="w-full bg-transparent outline-none sm:w-56" />
                 </label>
+                {sectionName === "admissions" && portal === "admin" && (
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-semibold text-[#526b55]">Status<select aria-label="Filter by status" value={admissionsStatus} onChange={(e) => { setAdmissionsStatus(e.target.value); setAdmissionsPage(1); }} className="ml-2 rounded-xl border border-[#e8e6dc] bg-white px-3 py-2 text-sm font-normal"><option value="">All</option><option>PENDING</option><option>UNDER_REVIEW</option><option>INFO_REQUESTED</option><option>APPROVED</option><option>REJECTED</option></select></label>
+                  </div>
+                )}
               </div>
+              {sectionName === "admissions" && portal === "admin" && (
+                <div className="flex items-center gap-2 border-b border-[#eff2f0] px-5 py-3 text-xs text-[#8a9891]">
+                  <span>{admissionsTotal} record(s) · Page {admissionsPage}/{admissionsTotalPages}</span>
+                  <button type="button" disabled={admissionsPage <= 1} onClick={() => setAdmissionsPage((p) => Math.max(1, p - 1))} className="ml-auto rounded-lg border border-[#dfe9e3] px-3 py-1.5 font-semibold disabled:opacity-50">Previous</button>
+                  <button type="button" disabled={admissionsPage >= admissionsTotalPages} onClick={() => setAdmissionsPage((p) => p + 1)} className="rounded-lg border border-[#dfe9e3] px-3 py-1.5 font-semibold disabled:opacity-50">Next</button>
+                </div>
+              )}
               {error && <div className="p-5"><ErrorBanner message={error} /></div>}
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[640px] border-collapse text-left text-sm">
@@ -725,7 +790,7 @@ export function PortalWorkspace({ portal, section: sectionProp = "dashboard" }: 
       </div>
 
       <nav aria-label="Workspace navigation" className={`fixed inset-x-0 bottom-0 z-30 flex gap-1 overflow-x-auto border-t px-2 py-2 backdrop-blur-md lg:hidden ${isAdmin ? "border-[#e8e6dc] bg-[#fbf9f2]/95" : "border-[#e4ebe7] bg-white/95"}`}>
-        {nav.filter((key) => isAdmin || ["dashboard", "children", "attendance", "meals", "invoices", "messages", "staff", "classrooms"].includes(key)).map((key) => <Link key={key} href={key === "dashboard" ? `/${portal}` : `/${portal}/${key}`} aria-current={sectionName === key ? "page" : undefined} className={`flex min-w-[68px] flex-1 flex-col items-center gap-1 rounded-xl px-2 py-1.5 text-[10px] font-semibold ${sectionName === key ? isAdmin ? "bg-[#293d35] text-white" : "bg-[#eaf5ee] text-[#286b4d]" : "text-[#708079]"}`}><NavIcon name={key} /><span>{sections[key]?.label?.split(" ")[0] ?? key}</span></Link>)}
+        {nav.filter((key) => isAdmin || ["dashboard", "children", "attendance", "meals", "invoices", "messages", "staff", "classrooms"].includes(key)).map((key) => <Link key={key} href={sectionHref(portal, key)} aria-current={sectionName === key ? "page" : undefined} className={`flex min-w-[68px] flex-1 flex-col items-center gap-1 rounded-xl px-2 py-1.5 text-[10px] font-semibold ${sectionName === key ? isAdmin ? "bg-[#293d35] text-white" : "bg-[#eaf5ee] text-[#286b4d]" : "text-[#708079]"}`}><NavIcon name={key} /><span>{sections[key]?.label?.split(" ")[0] ?? key}</span></Link>)}
       </nav>
 
       {formOpen && section.fields && <div className="fixed inset-0 z-50 grid place-items-center bg-[#10231e]/45 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setFormOpen(false); }}><section role="dialog" aria-modal="true" aria-labelledby="create-title" className={`max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl sm:p-8 ${isAdmin ? "admin-dialog" : ""}`}><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#5d8678]">New record</p><h2 id="create-title" className="mt-1 text-2xl font-black">{section.label}</h2></div><button type="button" onClick={() => setFormOpen(false)} aria-label="Close dialog" className="grid size-9 place-items-center rounded-xl bg-[#f2f6f3] text-[#52675e]">×</button></div><form onSubmit={(event) => void submitCreate(event)} className="mt-6 space-y-4">{section.fields.map((field) => <label key={field.name} className="block text-sm font-semibold text-[#3d594e]">{field.label}{field.type === "select" ? <select required={field.required} name={field.name} className="mt-2 w-full rounded-xl border border-[#dfe9e3] bg-[#fbfdfb] px-3.5 py-3 text-sm outline-none focus:border-[#82b797]">{field.options?.map((option) => <option key={option} value={option}>{option.replaceAll("_", " ")}</option>)}</select> : <input required={field.required} name={field.name} type={field.type ?? "text"} step={field.type === "number" ? "any" : undefined} className="mt-2 w-full rounded-xl border border-[#dfe9e3] bg-[#fbfdfb] px-3.5 py-3 text-sm outline-none focus:border-[#82b797]" />}</label>)}{error && <ErrorBanner message={error} />}<button disabled={saving} type="submit" className={`w-full rounded-xl px-4 py-3 text-sm font-semibold text-white transition disabled:opacity-60 ${isAdmin ? "bg-[#293d35] hover:bg-[#526b55]" : "bg-[#246b4b] hover:bg-[#1d5c40]"}`}>{saving ? "Saving…" : "Create record"}</button></form></section></div>}

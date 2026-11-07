@@ -29,6 +29,7 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { AccessService } from "../common/access.service.js";
 import { AuditService } from "../common/audit.service.js";
+import { OutboxService } from "../kafka/outbox.service.js";
 import { Roles } from "../common/decorators/roles.decorator.js";
 import { CurrentUser, type AuthenticatedUser } from "../common/decorators/current-user.decorator.js";
 import { isStaffRole } from "../common/guards/roles.guard.js";
@@ -120,13 +121,23 @@ class MealsService {
     private readonly prisma: PrismaService,
     private readonly access: AccessService,
     private readonly audit: AuditService,
+    private readonly outbox: OutboxService,
   ) {}
 
-  async list(query: QueryMealsDto) {
+  async list(query: QueryMealsDto, user?: AuthenticatedUser) {
     const { skip, take, page, pageSize } = normalizePage(query);
+    let classroomFilter: string[] | undefined;
+    if (user) {
+      const visibleIds = await this.access.visibleChildIds(user);
+      if (visibleIds.length === 0) return toPage([], 0, page, pageSize);
+      const children = await this.prisma.child.findMany({ where: { id: { in: visibleIds } }, select: { classroomId: true } });
+      classroomFilter = [...new Set(children.map((c) => c.classroomId).filter((x): x is string => !!x))];
+      if (classroomFilter.length === 0) return toPage([], 0, page, pageSize);
+      if (user.role === "SUPER_ADMIN" || user.role === "ADMIN" || user.role === "DIRECTOR") classroomFilter = undefined;
+    }
     const where = {
       ...(query.date ? { date: startOfDay(new Date(query.date)) } : {}),
-      ...(query.classroomId ? { classroomId: query.classroomId } : {}),
+      ...(query.classroomId ? { classroomId: query.classroomId } : classroomFilter ? { classroomId: { in: classroomFilter } } : {}),
     };
     const [items, total] = await Promise.all([
       this.prisma.meal.findMany({ where, orderBy: [{ date: "desc" }, { mealType: "asc" }], skip, take }),
@@ -174,14 +185,27 @@ class MealsService {
     const meal = await this.prisma.meal.findUnique({ where: { id: mealId } });
     if (!meal) throw new NotFoundException("Meal not found");
     await this.access.assertChildAccess(actor, dto.childId);
-    return this.prisma.mealRecord.upsert({
+    const record = await this.prisma.mealRecord.upsert({
       where: { mealId_childId: { mealId, childId: dto.childId } },
       create: { mealId, childId: dto.childId, consumption: dto.consumption, notes: dto.notes ?? null },
       update: { consumption: dto.consumption, notes: dto.notes ?? null },
     });
+    await this.outbox.enqueue("meal.recorded", { id: record.id, mealId, childId: dto.childId, mealType: meal.mealType, consumption: dto.consumption });
+    return record;
   }
 
-  async records(mealId: string) {
+  async records(mealId: string, user?: AuthenticatedUser) {
+    const meal = await this.prisma.meal.findUnique({ where: { id: mealId } });
+    if (!meal) throw new NotFoundException("Meal not found");
+    if (user) {
+      const visibleIds = await this.access.visibleChildIds(user);
+      const children = await this.prisma.child.findMany({ where: { id: { in: visibleIds } }, select: { classroomId: true } });
+      const allowed = new Set(children.map((c) => c.classroomId).filter(Boolean));
+      const isAdmin = user.role === "SUPER_ADMIN" || user.role === "ADMIN" || user.role === "DIRECTOR";
+      if (!isAdmin) {
+        if (!meal.classroomId || !allowed.has(meal.classroomId)) throw new NotFoundException("Meal not found");
+      }
+    }
     return this.prisma.mealRecord.findMany({
       where: { mealId },
       include: { child: { select: { id: true, firstName: true, lastName: true } } },
@@ -216,8 +240,8 @@ export class MealsController {
   constructor(private readonly meals: MealsService) {}
 
   @Get()
-  list(@Query() query: QueryMealsDto) {
-    return this.meals.list(query);
+  list(@Query() query: QueryMealsDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.meals.list(query, user);
   }
 
   @Post()
@@ -244,8 +268,8 @@ export class MealsController {
   }
 
   @Get(":id/records")
-  records(@Param("id") id: string) {
-    return this.meals.records(id);
+  records(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.meals.records(id, user);
   }
 
   @Get("child/:childId")

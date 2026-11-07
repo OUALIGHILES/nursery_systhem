@@ -5,6 +5,8 @@ import { PrismaService } from "../prisma/prisma.service.js";
 import { MailService } from "../common/mail.service.js";
 import { KAFKA } from "./topics.js";
 import type { Env } from "../config/env.js";
+import { isAdminEvent, mapCategory, composeAdminBody } from "../notifications/domain/category-mapper.js";
+import { adminRecipientIds, parentRecipientIds } from "../notifications/domain/recipient-policy.js";
 
 const ALL_TOPICS = [...KAFKA.TOPICS];
 
@@ -49,6 +51,11 @@ export class NotificationEventConsumer extends BaseEventConsumer {
     "notification.requested",
     "enrollment.approved",
     "enrollment.rejected",
+    "enrollment.submitted",
+    "child.enrolled",
+    "child.updated",
+    "activity.created",
+    "meal.recorded",
     "incident.reported",
   ];
   constructor(config: ConfigService<Env, true>, prisma: PrismaService) {
@@ -56,6 +63,22 @@ export class NotificationEventConsumer extends BaseEventConsumer {
   }
   protected async handle(event: ConsumedEvent) {
     const p = event.payload as ParentNotifyPayload & { userId?: string; type?: never };
+    // Admin fan-out: only admin trio, safe fields only (no medical/password).
+    if (isAdminEvent(event.topic)) {
+      if (event.topic === "meal.recorded" && !p.id) return;
+      const userIds = await adminRecipientIds(this.prisma);
+      if (!userIds.length) return;
+      const mapped = mapCategory(event.topic, p);
+      const title = mapped.title;
+      const body = composeAdminBody(event.topic, p);
+      const link = mapped.link;
+      const type = mapped.type;
+      await this.prisma.notification.createMany({
+        data: userIds.map((userId) => ({ userId, type, title, body, link })),
+        skipDuplicates: true,
+      });
+      return;
+    }
     if (event.topic === "notification.requested" && p.userId) {
       await this.prisma.notification.create({
         data: {

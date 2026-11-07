@@ -1,0 +1,6 @@
+environment    = "production"
+cloud_provider = "TODO"
+region         = "TODO"
+vpc_cidr       = "10.30.0.0/16"
+domain         = "TODO"
+image_tag      = "TODO"

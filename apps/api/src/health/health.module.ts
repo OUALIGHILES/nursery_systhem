@@ -32,6 +32,7 @@ import { isStaffRole } from "../common/guards/roles.guard.js";
 import { ForbiddenException } from "@nestjs/common";
 import type { AllergySeverity, IncidentSeverity } from "../generated/prisma/enums.js";
 import { EmailHealthController } from "./email-health.controller.js";
+import { LivenessController } from "./liveness.controller.js";
 
 const SEVERITIES: AllergySeverity[] = ["MILD", "MODERATE", "SEVERE"];
 const INCIDENT_SEVERITIES: IncidentSeverity[] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
@@ -289,7 +290,7 @@ export class HealthController {
 }
 
 @Module({
-  controllers: [HealthController, EmailHealthController],
+  controllers: [HealthController, EmailHealthController, LivenessController],
   providers: [HealthService],
   exports: [HealthService],
 })

@@ -68,7 +68,7 @@ export class MessagingRepository {
             take: 1,
             include: {
               attachments: true,
-              sender: { select: { id: true, firstName: true, lastName: true } },
+              sender: { select: { id: true, firstName: true, lastName: true, role: { select: { name: true } } } },
             },
           },
         },

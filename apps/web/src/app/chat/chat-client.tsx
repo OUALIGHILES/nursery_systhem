@@ -12,6 +12,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { chatRequest } from "./chat-api";
 import type { ChatContact, ChatMessage } from "./chat-types";
+import { roleLabel } from "./chat-types";
 import { useChat } from "./hooks/use-chat";
 import { useConversation } from "./hooks/use-conversation";
 import { useOnlineStatus } from "./hooks/use-online-status";
@@ -26,7 +27,7 @@ interface Session {
   mustChangePassword?: boolean;
 }
 
-export default function ChatClient() {
+export default function ChatClient({ homeHref = "/", embedded = false }: { homeHref?: string; embedded?: boolean }) {
   const router = useRouter();
   const { socket, connected, connectionError } = useSocket();
   const [session, setSession] = useState<Session | null>(null);
@@ -70,6 +71,8 @@ export default function ChatClient() {
       connected={connected}
       connectionError={connectionError}
       session={session}
+      homeHref={homeHref}
+      embedded={embedded}
     />
   );
 }
@@ -79,11 +82,15 @@ function MessagingScreen({
   connected,
   connectionError,
   session,
+  homeHref,
+  embedded,
 }: {
   socket: ReturnType<typeof useSocket>["socket"];
   connected: boolean;
   connectionError: string | null;
   session: Session;
+  homeHref: string;
+  embedded: boolean;
 }) {
   const chat = useChat(socket, session.id);
   const active =
@@ -117,7 +124,7 @@ function MessagingScreen({
   const peerName = active?.peer
     ? `${active.peer.firstName} ${active.peer.lastName}`
     : "Conversation";
-  const peerRole = active?.peer?.role?.replaceAll("_", " ").toLowerCase() ?? "";
+  const peerRole = active?.peer?.role ? roleLabel(active.peer.role) : "";
   const totalUnread = chat.conversations.reduce(
     (total, item) => total + item.unreadCount,
     0,
@@ -181,11 +188,12 @@ function MessagingScreen({
   }
 
   return (
-    <main className="flex min-h-screen flex-col bg-[#f5f7f6] text-[#21332d]">
+    <main className={embedded ? "flex h-[calc(100vh-140px)] min-h-[560px] flex-col bg-[#f5f7f6] text-[#21332d]" : "flex min-h-screen flex-col bg-[#f5f7f6] text-[#21332d]"}>
+      {!embedded && (
       <header className="flex h-[72px] items-center justify-between border-b border-[#e4ebe7] bg-white px-5 sm:px-8">
         <div className="flex items-center gap-3">
           <Link
-            href="/"
+            href={homeHref}
             className="grid size-10 place-items-center rounded-2xl bg-[#e6f4ed] text-lg font-bold text-[#26714c]"
             aria-label="Home"
           >
@@ -210,9 +218,10 @@ function MessagingScreen({
           </span>
         </div>
       </header>
+      )}
 
-      <div className="mx-auto flex min-h-0 w-full max-w-[1440px] flex-1 p-0 sm:p-5 lg:p-7">
-        <section className="flex min-h-[calc(100vh-72px)] w-full overflow-hidden bg-white sm:min-h-[calc(100vh-112px)] sm:rounded-2xl sm:border sm:border-[#e3ebe6] sm:shadow-[0_8px_40px_rgba(27,52,40,0.05)]">
+      <div className={embedded ? "mx-auto flex min-h-0 w-full max-w-[1440px] flex-1 p-0" : "mx-auto flex min-h-0 w-full max-w-[1440px] flex-1 p-0 sm:p-5 lg:p-7"}>
+        <section className={embedded ? "flex h-full w-full overflow-hidden bg-white" : "flex min-h-[calc(100vh-72px)] w-full overflow-hidden bg-white sm:min-h-[calc(100vh-112px)] sm:rounded-2xl sm:border sm:border-[#e3ebe6] sm:shadow-[0_8px_40px_rgba(27,52,40,0.05)]"}>
           <aside
             className={`${mobileChatOpen ? "hidden sm:flex" : "flex"} w-full shrink-0 flex-col border-r border-[#edf1ee] sm:w-[330px] lg:w-[370px]`}
           >
@@ -354,7 +363,7 @@ function MessagingScreen({
                     </p>
                   </div>
                   <span className="rounded-full bg-[#f4f7f5] px-3 py-1.5 text-[11px] capitalize text-[#738078]">
-                    {active.type.replaceAll("_", " ").toLowerCase()}
+                    {typeof active.type === "string" ? active.type.replaceAll("_", " ").toLowerCase() : ""}
                   </span>
                 </header>
 
@@ -634,7 +643,7 @@ function ContactDialog({
                   {contact.firstName} {contact.lastName}
                 </span>
                 <span className="text-xs capitalize text-[#87948d]">
-                  {contact.role.replaceAll("_", " ").toLowerCase()}
+                  {roleLabel(contact.role)}
                 </span>
               </span>
             </button>

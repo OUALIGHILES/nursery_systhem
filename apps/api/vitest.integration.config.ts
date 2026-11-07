@@ -9,7 +9,6 @@ export default defineConfig({
     testTimeout: 60_000,
     hookTimeout: 60_000,
     // Integration tests need real DB round-trips and parallel approvals.
-    pool: 'forks',
-    forks: { singleFork: true },
+    maxWorkers: 1,
   },
 });

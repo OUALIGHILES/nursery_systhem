@@ -16,13 +16,13 @@ export class ClassroomsController {
   @Get()
   list(@CurrentUser() user: AuthenticatedUser) {
     if (!isStaffRole(user.role) && user.role !== "PARENT") throw new ForbiddenException();
-    return this.classrooms.list();
+    return this.classrooms.list(user);
   }
 
   @Get(":id")
   get(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
     if (!isStaffRole(user.role) && user.role !== "PARENT") throw new ForbiddenException();
-    return this.classrooms.get(id);
+    return this.classrooms.get(id, user);
   }
 
   @Post()

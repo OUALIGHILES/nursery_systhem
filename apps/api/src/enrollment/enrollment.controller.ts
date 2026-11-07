@@ -39,6 +39,13 @@ export class EnrollmentController {
   }
 
   @ApiBearerAuth()
+  @Roles("PARENT")
+  @Get("my-applications")
+  myApplications(@CurrentUser() user: AuthenticatedUser, @Query() query: QueryEnrollmentApplicationsDto) {
+    return this.enrollment.myApplications(user.email, query);
+  }
+
+  @ApiBearerAuth()
   @Roles("SUPER_ADMIN", "ADMIN", "DIRECTOR")
   @Get(":id")
   get(@Param("id") id: string) {

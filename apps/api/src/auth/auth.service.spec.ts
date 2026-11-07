@@ -16,7 +16,7 @@ describe("AuthService mandatory password change", () => {
   let prisma: {
     user: { findUnique: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
     refreshToken: { create: ReturnType<typeof vi.fn>; updateMany: ReturnType<typeof vi.fn>; findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
-    passwordResetToken: { findUnique: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
+    passwordResetToken: { findUnique: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn>; updateMany: ReturnType<typeof vi.fn> };
     $transaction: ReturnType<typeof vi.fn>;
   };
   let jwt: { signAsync: ReturnType<typeof vi.fn> };
@@ -30,11 +30,20 @@ describe("AuthService mandatory password change", () => {
     prisma = {
       user: { findUnique: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
       refreshToken: { create: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
-      passwordResetToken: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
-      $transaction: vi.fn(async (ops: unknown[]) => {
-        // Execute the array form used by changePassword/resetPassword.
-        await Promise.all((ops as Promise<unknown>[]).map((op) => op));
-        return ops;
+      passwordResetToken: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+      $transaction: vi.fn(async (arg: unknown) => {
+        if (typeof arg === "function") {
+          // Interactive transaction (resetPassword): invoke callback with
+          // a mock client backed by the same prisma spies.
+          return (arg as (tx: unknown) => Promise<unknown>)({
+            user: prisma.user,
+            refreshToken: prisma.refreshToken,
+            passwordResetToken: prisma.passwordResetToken,
+          });
+        }
+        // Array transaction (changePassword / verifyEmail).
+        await Promise.all((arg as Promise<unknown>[]).map((op) => op));
+        return arg;
       }),
     };
     jwt = { signAsync: vi.fn().mockResolvedValue("access-token") };
@@ -43,9 +52,13 @@ describe("AuthService mandatory password change", () => {
         if (key === "JWT_ACCESS_SECRET") return "test-secret-that-is-at-least-thirty-two-chars-long";
         if (key === "JWT_ACCESS_TTL") return "15m";
         if (key === "JWT_REFRESH_TTL") return "7d";
+        if (key === "PASSWORD_RESET_TTL_MINUTES") return 30;
+        if (key === "CORS_ORIGINS") return "http://localhost:3000";
         return undefined;
       }),
     };
+    // Default single-use consume success; individual tests may override.
+    prisma.passwordResetToken.updateMany.mockResolvedValue({ count: 1 });
     audit = { log: vi.fn().mockResolvedValue(undefined) };
     mail = { send: vi.fn().mockResolvedValue(undefined) };
     moduleRef = await Test.createTestingModule({

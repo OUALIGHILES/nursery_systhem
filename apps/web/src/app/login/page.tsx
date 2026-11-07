@@ -37,7 +37,7 @@ export default function LoginPage() {
               SUPER_ADMIN: "/admin",
               ADMIN: "/admin",
               DIRECTOR: "/admin",
-              TEACHER: "/staff",
+              TEACHER: "/teacher",
               STAFF: "/staff",
               PARENT: "/parent",
             }[body.user.role] ?? "/chat"
@@ -153,6 +153,12 @@ export default function LoginPage() {
                   {error}
                 </p>
               )}
+
+              <div className="text-right">
+                <Link href="/forgot-password" className="text-sm font-semibold text-[#1f4a38] transition hover:text-[#14372d]">
+                  Forgot password?
+                </Link>
+              </div>
 
               <button
                 type="submit"

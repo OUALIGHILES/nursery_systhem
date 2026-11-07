@@ -172,8 +172,10 @@ export class ChildrenService {
     const child = await this.prisma.child.findFirst({ where: { id, deletedAt: null } });
     if (!child) throw new NotFoundException("Child not found");
     const pickup = await this.prisma.authorizedPickup.create({ data: { childId: id, fullName: dto.fullName, relation: dto.relation, phone: dto.phone, idDocument: dto.idDocument ?? null } });
-    await this.audit.log({ actorId: actor.id, action: "child.pickup_added", entity: "AuthorizedPickup", entityId: pickup.id });
-    return pickup;
+    await this.audit.log({ actorId: actor.id, action: "child.pickup_added", entity: "AuthorizedPickup", entityId: pickup.id, metadata: { childId: id } });
+    const { idDocument, ...safe } = pickup;
+    void idDocument;
+    return safe;
   }
 
   async removePickup(id: string, pickupId: string, actor: AuthenticatedUser) {
@@ -181,7 +183,7 @@ export class ChildrenService {
     const existing = await this.prisma.authorizedPickup.findFirst({ where: { id: pickupId, childId: id } });
     if (!existing) throw new NotFoundException("Authorized pickup not found");
     await this.prisma.authorizedPickup.update({ where: { id: pickupId }, data: { isActive: false } });
-    await this.audit.log({ actorId: actor.id, action: "child.pickup_removed", entity: "AuthorizedPickup", entityId: pickupId });
+    await this.audit.log({ actorId: actor.id, action: "child.pickup_removed", entity: "AuthorizedPickup", entityId: pickupId, metadata: { childId: id } });
     return { message: "Authorized pickup removed" };
   }
 
@@ -234,7 +236,7 @@ export class ChildrenService {
     };
   }
 
-  private detail(c: { id: string; firstName: string; lastName: string; dateOfBirth: Date; gender: string; status: string; photoUrl: string | null; medicalNotes: string | null; bloodType: string | null; createdAt: Date; classroom: { id: string; name: string; program: string; capacity: number } | null; parents: { relation: string; isPrimary: boolean; canPickup: boolean; parent: { id: string; address: string | null; user: { id: string; firstName: string; lastName: string; email: string; phone: string | null } } }[]; allergies: { id: string; allergen: string; severity: string; notes: string | null }[]; authorizedPickups: { id: string; fullName: string; relation: string; phone: string }[] }) {
+  private detail(c: { id: string; firstName: string; lastName: string; dateOfBirth: Date; gender: string; status: string; photoUrl: string | null; medicalNotes: string | null; bloodType: string | null; createdAt: Date; classroom: { id: string; name: string; program: string; capacity: number } | null; parents: { relation: string; isPrimary: boolean; canPickup: boolean; parent: { id: string; address: string | null; user: { id: string; firstName: string; lastName: string; email: string; phone: string | null } } }[]; allergies: { id: string; allergen: string; severity: string; notes: string | null }[]; authorizedPickups: { id: string; fullName: string; relation: string; phone: string; isActive?: boolean }[] }) {
     return {
       id: c.id,
       firstName: c.firstName,
@@ -249,7 +251,7 @@ export class ChildrenService {
       classroom: c.classroom ? { id: c.classroom.id, name: c.classroom.name, program: c.classroom.program, capacity: c.classroom.capacity } : null,
       parents: c.parents.map((p) => ({ parentId: p.parent.id, userId: p.parent.user.id, relation: p.relation, isPrimary: p.isPrimary, canPickup: p.canPickup, firstName: p.parent.user.firstName, lastName: p.parent.user.lastName, email: p.parent.user.email, phone: p.parent.user.phone, address: p.parent.address })),
       allergies: c.allergies,
-      authorizedPickups: c.authorizedPickups,
+      authorizedPickups: c.authorizedPickups.map((p) => ({ id: p.id, fullName: p.fullName, relation: p.relation, phone: p.phone, isActive: p.isActive ?? true })),
     };
   }
 }

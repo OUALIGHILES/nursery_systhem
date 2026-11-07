@@ -132,35 +132,63 @@ export class AuthService {
     const user = await this.prisma.user.findFirst({
       where: { email: email.toLowerCase().trim(), isActive: true, deletedAt: null },
     });
-    // Always respond identically to avoid account enumeration
-    if (user) {
-      const raw = generateOpaqueToken(48);
-      await this.prisma.passwordResetToken.create({
-        data: { userId: user.id, tokenHash: hashToken(raw), expiresAt: new Date(Date.now() + 60 * 60 * 1000) },
-      });
-      const webUrl = (this.config.get("CORS_ORIGINS", { infer: true }).split(",")[0] ?? "http://localhost:3000").trim();
-      const link = `${webUrl}/reset-password?token=${raw}`;
-      await this.mail.send(user.email, "Reset your password", `Reset your Little Steps Nursery password using this link (valid for 1 hour): ${link}`);
-      await this.audit.log({ actorId: user.id, action: "auth.password_reset_requested", entity: "User", entityId: user.id });
+    // Always respond identically to avoid account enumeration. For nonexistent
+    // accounts, burn equivalent time with a dummy hash to reduce timing signal.
+    if (!user) {
+      await argon2.hash("forgot-password-dummy-password", { type: argon2.argon2id }).catch(() => undefined);
+      return { message: "If an account exists for that email, a reset link has been sent." };
     }
+    const ttlMinutes = this.config.get("PASSWORD_RESET_TTL_MINUTES", { infer: true });
+    const expiresAt = new Date(Date.now() + ttlMinutes * 60 * 1000);
+    const raw = generateOpaqueToken(48);
+    // Expire any older pending tokens so only the latest link remains valid.
+    await this.prisma.passwordResetToken.updateMany({
+      where: { userId: user.id, usedAt: null, expiresAt: { gt: new Date() } },
+      data: { expiresAt: new Date() },
+    }).catch(() => undefined);
+    await this.prisma.passwordResetToken.create({
+      data: { userId: user.id, tokenHash: hashToken(raw), expiresAt },
+    });
+    const webUrl = (this.config.get("CORS_ORIGINS", { infer: true }).split(",")[0] ?? "http://localhost:3000").trim();
+    const link = `${webUrl}/reset-password?token=${raw}`;
+    const text = `Hello ${user.firstName},\n\nWe received a request to reset your password for Little Steps Nursery.\n\nReset your password (valid for ${ttlMinutes} minutes): ${link}\n\nIf you did not request this, you can safely ignore this email — your password will not change.`;
+    const html = `<p>Hello ${escapeHtml(user.firstName)},</p><p>We received a request to reset your password for Little Steps Nursery.</p><p><a href="${link}">Reset your password</a> (valid for ${ttlMinutes} minutes)</p><p>If you did not request this, you can safely ignore this email — your password will not change.</p>`;
+    try {
+      await this.mail.send(user.email, "Reset your Little Steps Nursery password", text, html);
+    } catch (err) {
+      // Never reveal mail delivery failure — it would leak account existence.
+      this.logger.warn(`password reset email failed for user ${user.id}: ${(err as Error).message.slice(0, 200)}`);
+    }
+    await this.audit.log({ actorId: user.id, action: "auth.password_reset_requested", entity: "User", entityId: user.id });
     return { message: "If an account exists for that email, a reset link has been sent." };
   }
 
-  async resetPassword(rawToken: string, newPassword: string) {
+  async resetPassword(rawToken: string, newPassword: string, confirmPassword?: string) {
+    if (confirmPassword !== undefined && confirmPassword !== newPassword) {
+      throw new BadRequestException("Password confirmation does not match new password");
+    }
     const tokenHash = hashToken(rawToken);
     const stored = await this.prisma.passwordResetToken.findUnique({ where: { tokenHash } });
     if (!stored || stored.usedAt || stored.expiresAt < new Date()) {
       throw new BadRequestException("Invalid or expired reset token");
     }
     const passwordHash = await argon2.hash(newPassword, { type: argon2.argon2id });
-    await this.prisma.$transaction([
-      this.prisma.user.update({
+    await this.prisma.$transaction(async (tx) => {
+      // Single-use proof: atomically mark consumed. Only one concurrent
+      // request can win (count === 1); the loser sees count === 0 and aborts.
+      const consumed = await tx.passwordResetToken.updateMany({
+        where: { id: stored.id, usedAt: null, expiresAt: { gt: new Date() } },
+        data: { usedAt: new Date() },
+      });
+      if (consumed.count === 0) {
+        throw new BadRequestException("Invalid or expired reset token");
+      }
+      await tx.user.update({
         where: { id: stored.userId },
         data: { passwordHash, mustChangePassword: false, tokenVersion: { increment: 1 } },
-      }),
-      this.prisma.passwordResetToken.update({ where: { id: stored.id }, data: { usedAt: new Date() } }),
-      this.prisma.refreshToken.updateMany({ where: { userId: stored.userId, revokedAt: null }, data: { revokedAt: new Date() } }),
-    ]);
+      });
+      await tx.refreshToken.updateMany({ where: { userId: stored.userId, revokedAt: null }, data: { revokedAt: new Date() } });
+    });
     await this.audit.log({ actorId: stored.userId, action: "auth.password_reset", entity: "User", entityId: stored.userId });
     return { message: "Password updated. Please sign in with your new password." };
   }
@@ -233,4 +261,8 @@ export class AuthService {
       staffId: user.staffProfile?.id ?? null,
     };
   }
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }

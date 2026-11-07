@@ -18,7 +18,7 @@ const roleHome: Record<string, string> = {
   SUPER_ADMIN: "/admin",
   ADMIN: "/admin",
   DIRECTOR: "/admin",
-  TEACHER: "/staff",
+  TEACHER: "/teacher",
   STAFF: "/staff",
   PARENT: "/parent",
 };

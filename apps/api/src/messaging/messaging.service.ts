@@ -33,6 +33,20 @@ const isAdmin = (role: string) =>
 const isStaff = (role: string) =>
   STAFF_ROLES.includes(role as (typeof STAFF_ROLES)[number]);
 
+type RawUser = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  role: string | { name: string };
+};
+
+function normalizeUser(user: RawUser | null | undefined) {
+  if (!user) return null;
+  const role = typeof user.role === 'string' ? user.role : (user.role?.name ?? '');
+  return { id: user.id, firstName: user.firstName, lastName: user.lastName, role };
+}
+
+
 @Injectable()
 export class MessagingService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(MessagingService.name);
@@ -78,10 +92,15 @@ export class MessagingService implements OnModuleInit, OnModuleDestroy {
 
     const result = await Promise.all(
       items.map(async (conversation) => {
-        const peer =
+        const peerUser =
           conversation.participants.find(
             (participant) => participant.userId !== user.id,
           )?.user ?? null;
+        const peer = normalizeUser(peerUser);
+        const rawLastMessage = conversation.messages[0] ?? null;
+        const lastMessage = rawLastMessage
+          ? { ...rawLastMessage, sender: normalizeUser(rawLastMessage.sender) ?? rawLastMessage.sender }
+          : null;
         const unreadCount = await this.prisma.messageReceipt.count({
           where: {
             userId: user.id,
@@ -98,7 +117,7 @@ export class MessagingService implements OnModuleInit, OnModuleDestroy {
           type: conversation.type,
           childId: conversation.childId,
           peer,
-          lastMessage: conversation.messages[0] ?? null,
+          lastMessage,
           unreadCount,
           online: peer ? await this.redis.isOnline(peer.id) : false,
           updatedAt: conversation.updatedAt,
@@ -336,7 +355,7 @@ export class MessagingService implements OnModuleInit, OnModuleDestroy {
       before,
       query.pageSize,
     );
-    return rows.reverse();
+    return rows.reverse().map((row) => ({ ...row, sender: normalizeUser(row.sender) ?? row.sender }));
   }
 
   async createMessage(
@@ -460,7 +479,8 @@ export class MessagingService implements OnModuleInit, OnModuleDestroy {
         }
         return created;
       });
-      return { message, recipientIds: recipients.map(({ userId }) => userId) };
+      const normalizedMessage = { ...message, sender: normalizeUser(message.sender) ?? message.sender };
+      return { message: normalizedMessage, recipientIds: recipients.map(({ userId }) => userId) };
     } catch (error) {
       await this.removeStoredFiles(stored.map((file) => file.storageKey));
       throw error;

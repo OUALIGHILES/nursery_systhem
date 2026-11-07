@@ -9,6 +9,8 @@ export const KAFKA = {
     'payment.received',
     'enrollment.approved',
     'enrollment.rejected',
+    'enrollment.submitted',
+    'meal.recorded',
     'activity.created',
     'incident.reported',
     'notification.requested',

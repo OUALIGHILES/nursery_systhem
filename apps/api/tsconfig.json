@@ -19,5 +19,14 @@
     "strict": true,
     "strictPropertyInitialization": false,
     "types": ["vitest/globals", "node"]
-  }
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/**/*.spec.ts",
+    "test/**/*.ts",
+    "vitest*.config.ts",
+    "vitest.integration.config.ts"
+  ]
 }
