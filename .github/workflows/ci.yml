@@ -33,8 +33,13 @@ jobs:
       INTEGRATION_DATABASE_URL: postgresql://nursery:test-password@localhost:5433/nursery_test?schema=public
       REDIS_URL: redis://localhost:6379
       KAFKA_BROKERS: ""
+      POSTGRES_USER: nursery
+      POSTGRES_PASSWORD: test-password
+      POSTGRES_DB: nursery_test
+      CORS_ORIGINS: http://localhost:3000
       JWT_ACCESS_SECRET: test-secret-that-is-at-least-thirty-two-chars-long
       JWT_REFRESH_SECRET: test-secret-that-is-at-least-thirty-two-chars-long
+      NEXT_PUBLIC_API_URL: http://localhost:4000
       SMTP_HOST: ""
       NODE_ENV: test
     steps:
